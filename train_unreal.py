@@ -113,8 +113,8 @@ def train(args, ddp_model):
             time_stamp = time.time()
 
         if (epoch+1) % args.eval_interval == 0 and local_rank == 0:
-            torch.save(ddp_model.module.state_dict(), '{}/{}_{}.pth'.format(log_path, args.model_name, epoch))
-            torch.save(ddp_model.module.state_dict(), '{}/{}_{}.pth'.format(log_path, args.model_name, 'latest'))
+            torch.save(ddp_model.module.state_dict(), '{}/{}.pth'.format(log_path, epoch))
+            torch.save(ddp_model.module.state_dict(), '{}/{}.pth'.format(log_path, 'latest'))
 
         dist.barrier()
 
