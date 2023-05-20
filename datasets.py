@@ -235,7 +235,7 @@ class Unreal_Train_Dataset(Dataset):
 
         if self.augment == True:
             img0, imgt, img1, flow = random_resize(img0, imgt, img1, flow, p=0.1)
-            img0, imgt, img1, flow = random_crop(img0, imgt, img1, flow, crop_size=(224, 224))
+            img0, imgt, img1, flow = random_crop(img0, imgt, img1, flow, crop_size=(512, 512))
             img0, imgt, img1, flow = random_reverse_channel(img0, imgt, img1, flow, p=0.5)
             img0, imgt, img1, flow = random_vertical_flip_single(img0, imgt, img1, flow, p=0.3)
             img0, imgt, img1, flow = random_horizontal_flip_single(img0, imgt, img1, flow, p=0.5)
