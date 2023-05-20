@@ -40,8 +40,9 @@ def train(args, ddp_model):
 
     if local_rank == 0:
         os.makedirs(args.log_path, exist_ok=True)
-        os.makedirs(args.img_path, exist_ok=True)
         log_path = os.path.join(args.log_path, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        img_path = os.path.join(log_path, 'images')
+        os.makedirs(img_path, exist_ok=True)
         os.makedirs(log_path, exist_ok=True)
         logger = logging.getLogger()
         logger.setLevel('INFO')
@@ -98,11 +99,11 @@ def train(args, ddp_model):
             if (iters+1) % 100 == 0 and local_rank == 0:
                 logger.info('epoch:{}/{} iter:{}/{} time:{:.2f}+{:.2f} lr:{:.5e} loss_rec:{:.4e} loss_geo:{:.4e} loss_dis:{:.4e}'.format(epoch+1, args.epochs, iters+1, args.epochs * args.iters_per_epoch, data_time_interval, train_time_interval, lr, avg_rec.avg, avg_geo.avg, avg_dis.avg))
 
-                saveExr(os.path.join(args.img_path, '{:08d}_img0.exr'.format(iters)), img0[0])
-                saveExr(os.path.join(args.img_path, '{:08d}_imgt.exr'.format(iters)), imgt[0])
-                saveExr(os.path.join(args.img_path, '{:08d}_img1.exr'.format(iters)), img1[0])
-                saveExr(os.path.join(args.img_path, '{:08d}_imgt_pred.exr'.format(iters)), imgt_pred[0])
-                saveExr(os.path.join(args.img_path, '{:08d}_img_warped.exr'.format(iters)), img_warped[0])
+                saveExr(os.path.join(img_path, '{:08d}_img0.exr'.format(iters)), img0[0])
+                saveExr(os.path.join(img_path, '{:08d}_imgt.exr'.format(iters)), imgt[0])
+                saveExr(os.path.join(img_path, '{:08d}_img1.exr'.format(iters)), img1[0])
+                saveExr(os.path.join(img_path, '{:08d}_imgt_pred.exr'.format(iters)), imgt_pred[0])
+                saveExr(os.path.join(img_path, '{:08d}_img_warped.exr'.format(iters)), img_warped[0])
 
                 avg_rec.reset()
                 avg_geo.reset()
@@ -175,7 +176,6 @@ if __name__ == '__main__':
     from models.IFRNet_ours import Model
 
     args.log_path = config.log_path
-    args.img_path = os.path.join(args.log_path, 'img')
     args.num_workers = args.batch_size
 
     model = Model().to(args.device)
