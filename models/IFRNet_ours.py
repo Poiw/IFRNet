@@ -41,9 +41,9 @@ class ResBlock(nn.Module):
 
     def forward(self, x):
         out = self.conv1(x)
-        out[:, -self.side_channels:, :, :] = self.conv2(out[:, -self.side_channels:, :, :])
+        out[:, -self.side_channels:, :, :] = self.conv2(out[:, -self.side_channels:, :, :].clone())
         out = self.conv3(out)
-        out[:, -self.side_channels:, :, :] = self.conv4(out[:, -self.side_channels:, :, :])
+        out[:, -self.side_channels:, :, :] = self.conv4(out[:, -self.side_channels:, :, :].clone())
         out = self.prelu(x + self.conv5(out))
         return out
 
@@ -80,15 +80,14 @@ class Decoder4(nn.Module):
     def __init__(self):
         super(Decoder4, self).__init__()
         self.convblock = nn.Sequential(
-            convrelu(144+1, 144), 
+            convrelu(144, 144), 
             ResBlock(144, 24), 
             nn.ConvTranspose2d(144, 58, 4, 2, 1, bias=True)
         )
         
-    def forward(self, f0, f1, embt):
+    def forward(self, f0, f1):
         b, c, h, w = f0.shape
-        embt = embt.repeat(1, 1, h, w)
-        f_in = torch.cat([f0, f1, embt], 1)
+        f_in = torch.cat([f0, f1], 1)
         f_out = self.convblock(f_in)
         return f_out
 
@@ -158,7 +157,7 @@ class Model(nn.Module):
         self.gc_loss = Geometry(3)
 
 
-    def inference(self, img0, img1, embt, scale_factor=1.0):
+    def inference(self, img0, img1, scale_factor=1.0):
         mean_ = torch.cat([img0, img1], 2).mean(1, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
         img0 = img0 - mean_
         img1 = img1 - mean_
@@ -169,7 +168,7 @@ class Model(nn.Module):
         f0_1, f0_2, f0_3, f0_4 = self.encoder(img0_)
         f1_1, f1_2, f1_3, f1_4 = self.encoder(img1_)
 
-        out4 = self.decoder4(f0_4, f1_4, embt)
+        out4 = self.decoder4(f0_4, f1_4)
         up_flow0_4 = out4[:, 0:2]
         up_flow1_4 = out4[:, 2:4]
         ft_3_ = out4[:, 4:]
@@ -203,7 +202,7 @@ class Model(nn.Module):
         return imgt_pred
 
 
-    def forward(self, img0, img1, embt, imgt, flow=None):
+    def forward(self, img0, img1, imgt, flow=None):
         mean_ = torch.cat([img0, img1], 2).mean(1, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
         img0 = img0 - mean_
         img1 = img1 - mean_
@@ -213,7 +212,7 @@ class Model(nn.Module):
         f1_1, f1_2, f1_3, f1_4 = self.encoder(img1)
         ft_1, ft_2, ft_3, ft_4 = self.encoder(imgt_)
 
-        out4 = self.decoder4(f0_4, f1_4, embt)
+        out4 = self.decoder4(f0_4, f1_4)
         up_flow0_4 = out4[:, 0:2]
         up_flow1_4 = out4[:, 2:4]
         ft_3_ = out4[:, 4:]
@@ -242,13 +241,15 @@ class Model(nn.Module):
 
         loss_rec = self.l1_loss(imgt_pred - imgt) + self.tr_loss(imgt_pred, imgt)
         loss_geo = 0.01 * (self.gc_loss(ft_1_, ft_1) + self.gc_loss(ft_2_, ft_2) + self.gc_loss(ft_3_, ft_3))
+
+        warped_res = None
         if flow is not None:
             robust_weight0 = get_robust_weight(up_flow0_1, flow[:, 0:2], beta=0.3)
-            robust_weight1 = get_robust_weight(up_flow1_1, flow[:, 2:4], beta=0.3)
-            loss_dis = 0.01 * (self.rb_loss(2.0 * resize(up_flow0_2, 2.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(2.0 * resize(up_flow1_2, 2.0) - flow[:, 2:4], weight=robust_weight1))
-            loss_dis += 0.01 * (self.rb_loss(4.0 * resize(up_flow0_3, 4.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(4.0 * resize(up_flow1_3, 4.0) - flow[:, 2:4], weight=robust_weight1))
-            loss_dis += 0.01 * (self.rb_loss(8.0 * resize(up_flow0_4, 8.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(8.0 * resize(up_flow1_4, 8.0) - flow[:, 2:4], weight=robust_weight1))
+            loss_dis = 0.01 * self.rb_loss(2.0 * resize(up_flow0_2, 2.0) - flow[:, 0:2], weight=robust_weight0) 
+            loss_dis += 0.01 * self.rb_loss(4.0 * resize(up_flow0_3, 4.0) - flow[:, 0:2], weight=robust_weight0) 
+            loss_dis += 0.01 * self.rb_loss(8.0 * resize(up_flow0_4, 8.0) - flow[:, 0:2], weight=robust_weight0) 
+            warped_res = warp(img0 + mean_, flow[:, 0:2])
         else:
             loss_dis = 0.00 * loss_geo
 
-        return imgt_pred, loss_rec, loss_geo, loss_dis
+        return imgt_pred, warped_res, loss_rec, loss_geo, loss_dis

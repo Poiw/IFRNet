@@ -1,4 +1,5 @@
 import os
+os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
 import random
 import numpy as np
 import cv2
@@ -45,6 +46,15 @@ def random_vertical_flip(img0, imgt, img1, flow, p=0.3):
         flow = np.concatenate((flow[:, :, 0:1], -flow[:, :, 1:2], flow[:, :, 2:3], -flow[:, :, 3:4]), 2)
     return img0, imgt, img1, flow
 
+def random_vertical_flip_single(img0, imgt, img1, flow, p=0.3):
+    if random.uniform(0, 1) < p:
+        img0 = img0[::-1]
+        imgt = imgt[::-1]
+        img1 = img1[::-1]
+        flow = flow[::-1]
+        flow = np.concatenate((flow[:, :, 0:1], -flow[:, :, 1:2]), 2)
+    return img0, imgt, img1, flow
+
 
 def random_horizontal_flip(img0, imgt, img1, flow, p=0.5):
     if random.uniform(0, 1) < p:
@@ -55,6 +65,14 @@ def random_horizontal_flip(img0, imgt, img1, flow, p=0.5):
         flow = np.concatenate((-flow[:, :, 0:1], flow[:, :, 1:2], -flow[:, :, 2:3], flow[:, :, 3:4]), 2)
     return img0, imgt, img1, flow
 
+def random_horizontal_flip_single(img0, imgt, img1, flow, p=0.5):
+    if random.uniform(0, 1) < p:
+        img0 = img0[:, ::-1]
+        imgt = imgt[:, ::-1]
+        img1 = img1[:, ::-1]
+        flow = flow[:, ::-1]
+        flow = np.concatenate((-flow[:, :, 0:1], flow[:, :, 1:2]), 2)
+    return img0, imgt, img1, flow
 
 def random_rotate(img0, imgt, img1, flow, p=0.05):
     if random.uniform(0, 1) < p:
@@ -63,6 +81,15 @@ def random_rotate(img0, imgt, img1, flow, p=0.05):
         img1 = img1.transpose((1, 0, 2))
         flow = flow.transpose((1, 0, 2))
         flow = np.concatenate((flow[:, :, 1:2], flow[:, :, 0:1], flow[:, :, 3:4], flow[:, :, 2:3]), 2)
+    return img0, imgt, img1, flow
+
+def random_rotate_single(img0, imgt, img1, flow, p=0.05):
+    if random.uniform(0, 1) < p:
+        img0 = img0.transpose((1, 0, 2))
+        imgt = imgt.transpose((1, 0, 2))
+        img1 = img1.transpose((1, 0, 2))
+        flow = flow.transpose((1, 0, 2))
+        flow = np.concatenate((flow[:, :, 1:2], flow[:, :, 0:1]), 2)
     return img0, imgt, img1, flow
 
 
@@ -122,6 +149,104 @@ class Vimeo90K_Train_Dataset(Dataset):
         embt = torch.from_numpy(np.array(1/2).reshape(1, 1, 1).astype(np.float32))
 
         return img0, imgt, img1, flow, embt
+    
+
+from glob import glob
+from os.path import join as pjoin
+
+def upsampling_mv(motion_vector):
+    ratio_x = 2
+    ratio_y = 2
+
+    motion_vector[..., 1] = motion_vector[..., 1] * ratio_y
+    motion_vector[..., 0] = motion_vector[..., 0] * ratio_x
+
+    upsampled = cv2.resize(motion_vector, [motion_vector.shape[1]*ratio_y, motion_vector.shape[0]*ratio_x], interpolation=cv2.INTER_LINEAR)
+
+    return upsampled
+
+
+def load_exr(path, channel = 3):
+
+    img = cv2.imread(path, cv2.IMREAD_UNCHANGED)[..., :3]
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)[..., :channel]
+    # if use_opencv or channel == 1:
+    #     img = cv2.imread(path, cv2.IMREAD_UNCHANGED)[..., :3]
+    #     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)[..., :channel]
+    # else:
+    #     img = imageio.imread(path, "exr")[..., :channel]
+
+    img[np.isnan(img)] = 0
+    img[np.isinf(img)] = 1000
+
+    return img
+
+class Unreal_Train_Dataset(Dataset):
+    def __init__(self, data_dir_list, augment=True):
+        self.augment = augment
+        self.img0_list = []
+        self.imgt_list = []
+        self.img1_list = []
+
+        self.img_list = []
+        for data_dir in data_dir_list:
+            img_paths = glob(pjoin(data_dir, "PreTonemapHDRColor.*.exr"))
+            tmp_list = []
+            for path in img_paths:
+                idx = int(os.path.basename(path).split('.')[1])
+                tmp_list.append((data_dir, idx))
+            tmp_list = sorted(tmp_list, key=lambda x: x[1], reverse=False)
+
+            self.img_list += tmp_list
+        
+        self.data_list = []
+        
+        for i in range(len(self.img_list)):
+
+            if(i==len(self.img_list)-2): # if current frame is the last img
+                break   
+
+            img_1, img_t, img_0 = self.img_list[i+2], self.img_list[i+1], self.img_list[i]
+
+            if img_t[0]!=img_0[0] or img_t[0]!=img_1[0]:
+                continue
+
+            self.img0_list.append(img_0)
+            self.imgt_list.append(img_t)
+            self.img1_list.append(img_1)
+
+    def __len__(self):
+        return len(self.imgt_list)
+
+    def __getitem__(self, idx):
+
+
+        img0_path = pjoin(self.img0_list[idx][0], "High+SSAA", "PreTonemapHDRColor64SPP.{:04d}.exr".format(self.img0_list[idx][1]))
+        imgt_path = pjoin(self.imgt_list[idx][0], "High+SSAA", "PreTonemapHDRColor64SPP.{:04d}.exr".format(self.imgt_list[idx][1]))
+        img1_path = pjoin(self.img1_list[idx][0], "High+SSAA", "PreTonemapHDRColor64SPP.{:04d}.exr".format(self.img1_list[idx][1]))
+        flow_path = pjoin(self.imgt_list[idx][0], "MotionVector.{:04d}.exr".format(self.imgt_list[idx][1]))
+
+        img0 = np.clip(np.array(load_exr(img0_path)), 0, 100)
+        imgt = np.clip(np.array(load_exr(imgt_path)), 0, 100)
+        img1 = np.clip(np.array(load_exr(img1_path)), 0, 100)
+        flow = np.array(load_exr(flow_path, channel=2))
+        flow = upsampling_mv(flow)
+        flow[..., 0] = flow[..., 0] * -1
+
+        if self.augment == True:
+            img0, imgt, img1, flow = random_resize(img0, imgt, img1, flow, p=0.1)
+            img0, imgt, img1, flow = random_crop(img0, imgt, img1, flow, crop_size=(224, 224))
+            img0, imgt, img1, flow = random_reverse_channel(img0, imgt, img1, flow, p=0.5)
+            img0, imgt, img1, flow = random_vertical_flip_single(img0, imgt, img1, flow, p=0.3)
+            img0, imgt, img1, flow = random_horizontal_flip_single(img0, imgt, img1, flow, p=0.5)
+            img0, imgt, img1, flow = random_rotate_single(img0, imgt, img1, flow, p=0.05)
+
+        img0 = torch.from_numpy(img0.transpose((2, 0, 1)).copy())
+        imgt = torch.from_numpy(imgt.transpose((2, 0, 1)).copy())
+        img1 = torch.from_numpy(img1.transpose((2, 0, 1)).copy())
+        flow = torch.from_numpy(flow.transpose((2, 0, 1)).copy().astype(np.float32))
+
+        return img0, imgt, img1, flow
 
 
 class Vimeo90K_Test_Dataset(Dataset):

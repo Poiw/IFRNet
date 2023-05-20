@@ -11,10 +11,12 @@ from torch.utils.data import DataLoader
 import torch.distributed as dist
 from torch.utils.data.distributed import DistributedSampler
 from torch.nn.parallel import DistributedDataParallel as DDP
-from datasets import Vimeo90K_Train_Dataset, Vimeo90K_Test_Dataset
+from datasets import Unreal_Train_Dataset
 from metric import calculate_psnr, calculate_ssim
 from utils import AverageMeter
 import logging
+import imageio
+import config
 
 
 def get_lr(args, iters):
@@ -27,6 +29,10 @@ def set_lr(optimizer, lr):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
+def saveExr(path, tensor):
+    tensor = tensor.cpu().numpy()
+    tensor = tensor.transpose(1, 2, 0)
+    imageio.imwrite(path, tensor)
 
 def train(args, ddp_model):
     local_rank = args.local_rank
@@ -50,14 +56,11 @@ def train(args, ddp_model):
         logger.addHandler(fhlr)
         logger.info(args)
 
-    dataset_train = Vimeo90K_Train_Dataset(dataset_dir='/home/ltkong/Datasets/Vimeo90K/vimeo_triplet', augment=True)
+    dataset_train = Unreal_Train_Dataset(config.dataDir, augment=True)
     sampler = DistributedSampler(dataset_train)
     dataloader_train = DataLoader(dataset_train, batch_size=args.batch_size, num_workers=args.num_workers, pin_memory=True, drop_last=True, sampler=sampler)
     args.iters_per_epoch = dataloader_train.__len__()
     iters = args.resume_epoch * args.iters_per_epoch
-    
-    dataset_val = Vimeo90K_Test_Dataset(dataset_dir='/home/ltkong/Datasets/Vimeo90K/vimeo_triplet')
-    dataloader_val = DataLoader(dataset_val, batch_size=16, num_workers=16, pin_memory=True, shuffle=False, drop_last=True)
 
     optimizer = optim.AdamW(ddp_model.parameters(), lr=args.lr_start, weight_decay=0)
 
@@ -65,24 +68,22 @@ def train(args, ddp_model):
     avg_rec = AverageMeter()
     avg_geo = AverageMeter()
     avg_dis = AverageMeter()
-    best_psnr = 0.0
 
     for epoch in range(args.resume_epoch, args.epochs):
         sampler.set_epoch(epoch)
         for i, data in enumerate(dataloader_train):
             for l in range(len(data)):
                 data[l] = data[l].to(args.device)
-            img0, imgt, img1, flow, embt = data
+            img0, imgt, img1, flow = data
 
             data_time_interval = time.time() - time_stamp
             time_stamp = time.time()
 
             lr = get_lr(args, iters)
             set_lr(optimizer, lr)
-
             optimizer.zero_grad()
 
-            imgt_pred, loss_rec, loss_geo, loss_dis = ddp_model(img0, img1, embt, imgt, flow)
+            imgt_pred, img_warped, loss_rec, loss_geo, loss_dis = ddp_model(img0, img1, imgt, flow)
 
             loss = loss_rec + loss_geo + loss_dis
             loss.backward()
@@ -95,6 +96,13 @@ def train(args, ddp_model):
 
             if (iters+1) % 100 == 0 and local_rank == 0:
                 logger.info('epoch:{}/{} iter:{}/{} time:{:.2f}+{:.2f} lr:{:.5e} loss_rec:{:.4e} loss_geo:{:.4e} loss_dis:{:.4e}'.format(epoch+1, args.epochs, iters+1, args.epochs * args.iters_per_epoch, data_time_interval, train_time_interval, lr, avg_rec.avg, avg_geo.avg, avg_dis.avg))
+
+                saveExr(os.path.join(args.img_path, 'img0_{}.exr'.format(iters)), img0[0])
+                saveExr(os.path.join(args.img_path, 'imgt_{}.exr'.format(iters)), imgt[0])
+                saveExr(os.path.join(args.img_path, 'img1_{}.exr'.format(iters)), img1[0])
+                saveExr(os.path.join(args.img_path, 'imgt_pred_{}.exr'.format(iters)), imgt_pred[0])
+                saveExr(os.path.join(args.img_path, 'img_warped_{}.exr'.format(iters)), img_warped[0])
+
                 avg_rec.reset()
                 avg_geo.reset()
                 avg_dis.reset()
@@ -103,10 +111,7 @@ def train(args, ddp_model):
             time_stamp = time.time()
 
         if (epoch+1) % args.eval_interval == 0 and local_rank == 0:
-            psnr = evaluate(args, ddp_model, dataloader_val, epoch, logger)
-            if psnr > best_psnr:
-                best_psnr = psnr
-                torch.save(ddp_model.module.state_dict(), '{}/{}_{}.pth'.format(log_path, args.model_name, 'best'))
+            torch.save(ddp_model.module.state_dict(), '{}/{}_{}.pth'.format(log_path, args.model_name, epoch))
             torch.save(ddp_model.module.state_dict(), '{}/{}_{}.pth'.format(log_path, args.model_name, 'latest'))
 
         dist.barrier()
@@ -143,9 +148,8 @@ def evaluate(args, ddp_model, dataloader_val, epoch, logger):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='IFRNet')
-    parser.add_argument('--model_name', default='IFRNet', type=str, help='IFRNet, IFRNet_L, IFRNet_S')
     parser.add_argument('--local_rank', default=-1, type=int)
-    parser.add_argument('--world_size', default=4, type=int)
+    parser.add_argument('--world_size', default=1, type=int)
     parser.add_argument('--epochs', default=300, type=int)
     parser.add_argument('--eval_interval', default=1, type=int)
     parser.add_argument('--batch_size', default=6, type=int)
@@ -167,14 +171,10 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = True
 
-    if args.model_name == 'IFRNet':
-        from models.IFRNet import Model
-    elif args.model_name == 'IFRNet_L':
-        from models.IFRNet_L import Model
-    elif args.model_name == 'IFRNet_S':
-        from models.IFRNet_S import Model
+    from models.IFRNet_ours import Model
 
-    args.log_path = args.log_path + '/' + args.model_name
+    args.log_path = config.log_path
+    args.img_path = os.path.join(args.log_path, 'img')
     args.num_workers = args.batch_size
 
     model = Model().to(args.device)
