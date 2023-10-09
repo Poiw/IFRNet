@@ -332,49 +332,48 @@ class Model_extrapolation(nn.Module):
         self.gc_loss = Geometry(3)
 
 
-    # def inference(self, img0, img1, scale_factor=1.0):
-    #     mean_ = torch.cat([img0, img1], 2).mean(1, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
-    #     img0 = img0 - mean_
-    #     img1 = img1 - mean_
+    def inference(self, img0, img1, flow):
+        mean_ = torch.cat([img0, img1], 2).mean(1, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
+        img0 = img0 - mean_
+        img1 = img1 - mean_
 
-    #     img0_ = resize(img0, scale_factor=scale_factor)
-    #     img1_ = resize(img1, scale_factor=scale_factor)
+        f0_1, f0_2, f0_3, f0_4 = self.encoder(img0)
+        f1_1, f1_2, f1_3, f1_4 = self.encoder(img1)
 
-    #     f0_1, f0_2, f0_3, f0_4 = self.encoder(img0_)
-    #     f1_1, f1_2, f1_3, f1_4 = self.encoder(img1_)
+        flow_level_1 = 0.5 * resize(flow, scale_factor=0.5)
+        flow_level_2 = 0.25 * resize(flow, scale_factor=0.25)
+        flow_level_3 = 0.125 * resize(flow, scale_factor=0.125)
+        flow_level_4 = 0.0625 * resize(flow, scale_factor=0.0625)
 
-    #     out4 = self.decoder4(f0_4, f1_4)
-    #     up_flow0_4 = out4[:, 0:2]
-    #     up_flow1_4 = out4[:, 2:4]
-    #     ft_3_ = out4[:, 4:]
 
-    #     out3 = self.decoder3(ft_3_, f0_3, f1_3, up_flow0_4, up_flow1_4)
-    #     up_flow0_3 = out3[:, 0:2] + 2.0 * resize(up_flow0_4, scale_factor=2.0)
-    #     up_flow1_3 = out3[:, 2:4] + 2.0 * resize(up_flow1_4, scale_factor=2.0)
-    #     ft_2_ = out3[:, 4:]
+        out4 = self.decoder4(f0_4, f1_4, flow_level_4)
+        up_flow0_4 = out4[:, 0:2]
+        up_flow1_4 = out4[:, 2:4]
+        ft_3_ = out4[:, 4:]
 
-    #     out2 = self.decoder2(ft_2_, f0_2, f1_2, up_flow0_3, up_flow1_3)
-    #     up_flow0_2 = out2[:, 0:2] + 2.0 * resize(up_flow0_3, scale_factor=2.0)
-    #     up_flow1_2 = out2[:, 2:4] + 2.0 * resize(up_flow1_3, scale_factor=2.0)
-    #     ft_1_ = out2[:, 4:]
+        out3 = self.decoder3(ft_3_, f0_3, f1_3, up_flow0_4, up_flow1_4, flow_level_3)
+        up_flow0_3 = out3[:, 0:2] + 2.0 * resize(up_flow0_4, scale_factor=2.0)
+        up_flow1_3 = out3[:, 2:4] + 2.0 * resize(up_flow1_4, scale_factor=2.0)
+        ft_2_ = out3[:, 4:]
 
-    #     out1 = self.decoder1(ft_1_, f0_1, f1_1, up_flow0_2, up_flow1_2)
-    #     up_flow0_1 = out1[:, 0:2] + 2.0 * resize(up_flow0_2, scale_factor=2.0)
-    #     up_flow1_1 = out1[:, 2:4] + 2.0 * resize(up_flow1_2, scale_factor=2.0)
-    #     up_mask_1 = torch.sigmoid(out1[:, 4:5])
-    #     up_res_1 = out1[:, 5:]
+        out2 = self.decoder2(ft_2_, f0_2, f1_2, up_flow0_3, up_flow1_3, flow_level_2)
+        up_flow0_2 = out2[:, 0:2] + 2.0 * resize(up_flow0_3, scale_factor=2.0)
+        up_flow1_2 = out2[:, 2:4] + 2.0 * resize(up_flow1_3, scale_factor=2.0)
+        ft_1_ = out2[:, 4:]
 
-    #     up_flow0_1 = resize(up_flow0_1, scale_factor=(1.0/scale_factor)) * (1.0/scale_factor)
-    #     up_flow1_1 = resize(up_flow1_1, scale_factor=(1.0/scale_factor)) * (1.0/scale_factor)
-    #     up_mask_1 = resize(up_mask_1, scale_factor=(1.0/scale_factor))
-    #     up_res_1 = resize(up_res_1, scale_factor=(1.0/scale_factor))
+        out1 = self.decoder1(ft_1_, f0_1, f1_1, up_flow0_2, up_flow1_2, flow_level_1)
+        up_flow0_1 = out1[:, 0:2] + 2.0 * resize(up_flow0_2, scale_factor=2.0)
+        up_flow1_1 = out1[:, 2:4] + 2.0 * resize(up_flow1_2, scale_factor=2.0)
+        up_mask_1 = torch.sigmoid(out1[:, 4:5])
+        up_res_1 = out1[:, 5:]
+        
+        img0_warp = warp(img0, up_flow0_1)
+        img1_warp = warp(img1, up_flow1_1)
+        imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
+        imgt_pred = imgt_merge + up_res_1
+        imgt_pred = torch.clamp(imgt_pred, 0, 1)
 
-    #     img0_warp = warp(img0, up_flow0_1)
-    #     img1_warp = warp(img1, up_flow1_1)
-    #     imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
-    #     imgt_pred = imgt_merge + up_res_1
-    #     imgt_pred = torch.clamp(imgt_pred, 0, 1)
-    #     return imgt_pred
+        return imgt_pred
 
 
     def forward(self, img0, img1, imgt, flow):
