@@ -306,34 +306,22 @@ class Unreal_Extrapolation_Dataset(Dataset):
 
         flow_0 = flow_0 + warp_numpy(flow_1, flow_0)
 
-        flow = np.concatenate((flow_0, flow_1), 2)
-
+        flow = np.concatenate((flow_0, flow_1), 2)        
+    
         if self.augment == True:
             img0, imgt, img1, flow = random_resize(img0, imgt, img1, flow, p=0.1)
             img0, imgt, img1, flow = random_crop(img0, imgt, img1, flow, crop_size=(512, 512))
             img0, imgt, img1, flow = random_reverse_channel(img0, imgt, img1, flow, p=0.5)
-            img0, imgt, img1, flow = random_vertical_flip_single(img0, imgt, img1, flow, p=0.3)
-            img0, imgt, img1, flow = random_horizontal_flip_single(img0, imgt, img1, flow, p=0.5)
-            img0, imgt, img1, flow = random_rotate_single(img0, imgt, img1, flow, p=0.05)
+            img0, imgt, img1, flow = random_vertical_flip(img0, imgt, img1, flow, p=0.3)
+            img0, imgt, img1, flow = random_horizontal_flip(img0, imgt, img1, flow, p=0.5)
+            img0, imgt, img1, flow = random_rotate(img0, imgt, img1, flow, p=0.05)
 
         img0 = torch.from_numpy(img0.transpose((2, 0, 1)).copy())
         imgt = torch.from_numpy(imgt.transpose((2, 0, 1)).copy())
         img1 = torch.from_numpy(img1.transpose((2, 0, 1)).copy())
         flow = torch.from_numpy(flow.transpose((2, 0, 1)).copy().astype(np.float32))
 
-        if flow.shape[0] == 2:
-            print("flow_0 shape:")
-            print(flow_0.shape)
-            print("flow_1 shape:")
-            print(flow_1.shape)
-            print("img0 shape:")
-            print(img0.shape)
-            print("imgt shape:")
-            print(imgt.shape)
-            print("img1 shape:")
-            print(img1.shape)
-            print("flow shape:")
-            print(flow.shape)
+
 
         return img0, imgt, img1, flow
 

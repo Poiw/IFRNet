@@ -360,9 +360,9 @@ class Model_extrapolation(nn.Module):
             loss_dis = 0.01 * (self.rb_loss(2.0 * resize(up_flow0_2, 2.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(2.0 * resize(up_flow1_2, 2.0) - flow[:, 2:4], weight=robust_weight1))
             loss_dis += 0.01 * (self.rb_loss(4.0 * resize(up_flow0_3, 4.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(4.0 * resize(up_flow1_3, 4.0) - flow[:, 2:4], weight=robust_weight1))
             loss_dis += 0.01 * (self.rb_loss(8.0 * resize(up_flow0_4, 8.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(8.0 * resize(up_flow1_4, 8.0) - flow[:, 2:4], weight=robust_weight1))
-            warped_0 = warp(img0, flow[:, 0:2])
-            warped_1 = warp(img1, flow[:, 2:4])
-            imgt_warped = np.concatenate([warped_0, warped_1], 1)
+            warped_0 = warp(img0 + mean_, flow[:, 0:2])
+            warped_1 = warp(img1 + mean_, flow[:, 2:4])
+            imgt_warped = torch.cat([warped_0, warped_1], 1)
         else:
             loss_dis = 0.00 * loss_geo
 

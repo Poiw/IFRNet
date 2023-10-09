@@ -78,11 +78,6 @@ def train(args, ddp_model):
                 data[l] = data[l].to(args.device)
             img0, imgt, img1, flow = data
 
-            
-            print(img0.shape)
-            print(imgt.shape)
-            print(img1.shape)
-            print(flow.shape)
 
             data_time_interval = time.time() - time_stamp
             time_stamp = time.time()
