@@ -40,14 +40,14 @@ def train(args, ddp_model):
 
     if local_rank == 0:
         os.makedirs(args.log_path, exist_ok=True)
-        log_path = os.path.join(args.log_path, time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()))
+        log_path = os.path.join(args.log_path, time.strftime('%Y-%m-%d_%H:%M:%S', time.localtime()))
         img_path = os.path.join(log_path, 'images')
         os.makedirs(img_path, exist_ok=True)
         os.makedirs(log_path, exist_ok=True)
         logger = logging.getLogger()
         logger.setLevel('INFO')
         BASIC_FORMAT = '%(asctime)s:%(levelname)s:%(message)s'
-        DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
+        DATE_FORMAT = '%Y-%m-%d_%H:%M:%S'
         formatter = logging.Formatter(BASIC_FORMAT, DATE_FORMAT)
         chlr = logging.StreamHandler()
         chlr.setFormatter(formatter)

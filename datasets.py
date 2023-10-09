@@ -271,10 +271,10 @@ class Unreal_Extrapolation_Dataset(Dataset):
         
         for i in range(len(self.img_list)):
 
-            if(i==len(self.img_list)-2): # if current frame is the last img
+            if(i==len(self.img_list)-4): # if current frame is the last img
                 break   
 
-            img_t, img_1, img_0 = self.img_list[i+2], self.img_list[i+1], self.img_list[i]
+            img_t, img_1, img_0 = self.img_list[i+3], self.img_list[i+2], self.img_list[i]
 
             if img_t[0]!=img_0[0] or img_t[0]!=img_1[0]:
                 continue
