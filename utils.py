@@ -10,6 +10,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def warp_numpy(img, flow):
+
+    img = torch.from_numpy(img).unsqueeze(0).permute(0, 3, 1, 2)
+    flow = torch.from_numpy(flow).unsqueeze(0).permute(0, 3, 1, 2)
+
+    return warp(img, flow).squeeze(0).permute(1, 2, 0).numpy()
+
 
 def warp(img, flow):
     B, _, H, W = flow.shape
