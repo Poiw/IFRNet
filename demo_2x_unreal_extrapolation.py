@@ -10,6 +10,8 @@ from os.path import join as pjoin
 import imageio
 from tqdm import tqdm
 from utils import warp_numpy 
+import config
+from utils import DeToneSimple_muLaw, ToneSimple_muLaw_numpy
 
 def load_exr(path, channel = 3):
 
@@ -64,8 +66,8 @@ if __name__ == "__main__":
     st = 100
     en = 500
     dataDir = "/home/M2_Disk/Songyin/Data/Bunker/Train/Seq1"
-    targetDir = "/mnt/SATA_DISK_1/Songyin/ExtraSS/IFRNet_Extrapolation/Test/Bunker_GT"
-    model_path = '/mnt/SATA_DISK_1/Songyin/ExtraSS/IFRNet_Extrapolation/Bunker/218.pth'
+    targetDir = "/mnt/SATA_DISK_1/Songyin/ExtraSS/IFRNet_Extrapolation/Test/Bunker_Tonemap"
+    model_path = '/mnt/SATA_DISK_1/Songyin/ExtraSS/IFRNet_Extrapolation/Bunker_Tonemap/2023-10-10_21:57:00/272.pth'
     useHigh = False
 
     os.makedirs(targetDir, exist_ok=True)
@@ -88,10 +90,15 @@ if __name__ == "__main__":
 
             else:
 
-                img0_np = np.clip(loadImg(dataDir, idx-2, useHigh), 0, 5)
-                img1_np = np.clip(loadImg(dataDir, idx-1, useHigh), 0, 5)
+                img0_np = np.clip(loadImg(dataDir, idx-3, useHigh), 0, 100)
+                img1_np = np.clip(loadImg(dataDir, idx-1, useHigh), 0, 100)
 
-                flow_0 = loadMV(dataDir, idx-2, useHigh)
+                if config.useTonemap:
+                    img0_np = ToneSimple_muLaw_numpy(img0_np)
+                    img1_np = ToneSimple_muLaw_numpy(img1_np)
+
+
+                flow_0 = loadMV(dataDir, idx-3, useHigh)
                 flow_1 = loadMV(dataDir, idx-1, useHigh)
 
                 flow_0[..., 0] = flow_0[..., 0] * -1
@@ -115,6 +122,10 @@ if __name__ == "__main__":
                 
                 imgt_pred = model.inference(img0, img1, flow)
                 imgt_pred = imgt_pred.clamp(0, 5)
+
+                if config.useTonemap:
+                    imgt_pred = DeToneSimple_muLaw(imgt_pred)
+
 
                 img = imgt_pred[0].detach().cpu().numpy().transpose(1, 2, 0)
                 img = cv2.resize(img, (img0_np.shape[1], img0_np.shape[0]), interpolation=cv2.INTER_CUBIC)
