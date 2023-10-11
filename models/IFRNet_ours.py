@@ -371,7 +371,7 @@ class Model_extrapolation(nn.Module):
         img1_warp = warp(img1, up_flow1_1)
         imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
         imgt_pred = imgt_merge + up_res_1
-        imgt_pred = torch.clamp(imgt_pred, 0, 1)
+        # imgt_pred = torch.clamp(imgt_pred, 0, 1)
 
         return imgt_pred
 
@@ -417,7 +417,7 @@ class Model_extrapolation(nn.Module):
         img1_warp = warp(img1, up_flow1_1)
         imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
         imgt_pred = imgt_merge + up_res_1
-        imgt_pred = torch.clamp(imgt_pred, 0, 1)
+        # imgt_pred = torch.clamp(imgt_pred, 0, 1)
 
         loss_rec = self.l1_loss(imgt_pred - imgt) + self.tr_loss(imgt_pred, imgt)
         loss_geo = 0.01 * (self.gc_loss(ft_1_, ft_1) + self.gc_loss(ft_2_, ft_2) + self.gc_loss(ft_3_, ft_3))
