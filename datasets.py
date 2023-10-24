@@ -5,7 +5,7 @@ import numpy as np
 import cv2
 import torch
 from torch.utils.data import Dataset
-from utils import read, warp_numpy
+from utils import read, warp_numpy, ToneSimple_muLaw_numpy
 
 
 def random_resize(img0, imgt, img1, flow, p=0.1):
@@ -302,6 +302,11 @@ class Unreal_Extrapolation_Dataset(Dataset):
         flow_1[..., 0] = flow_1[..., 0] * -1
         flow_0 = np.array(load_exr(flow_0_path, channel=2))
         flow_0[..., 0] = flow_0[..., 0] * -1
+
+        img0 = ToneSimple_muLaw_numpy(img0)
+        imgt = ToneSimple_muLaw_numpy(imgt)
+        img1 = ToneSimple_muLaw_numpy(img1)
+
 
 
         flow_0 = flow_0 + warp_numpy(flow_1, flow_0)

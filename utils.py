@@ -10,6 +10,25 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+def ToneSimple_muLaw_numpy(img, mu=8.):
+    errors = img <= 0
+    result =  np.log(1 + mu * img) / np.log(1 + mu)
+    result[errors] = img[errors]
+    return result
+
+def DeToneSimple_muLaw_numpy(img, mu=8.):
+    errors = img <= 0
+    result =  (np.exp(img * np.log(1 + mu)) - 1) / mu
+    result[errors] = img[errors]
+    return result
+
+
+def DeToneSimple_muLaw(img, mu=8.):
+    errors = img <= 0
+    result =  (torch.exp(img * np.log(1 + mu)) - 1) / mu
+    result[errors] = img[errors]
+    return result
+
 def warp_numpy(img, flow):
 
     img = torch.from_numpy(img).unsqueeze(0).permute(0, 3, 1, 2)

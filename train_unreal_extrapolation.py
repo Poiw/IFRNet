@@ -17,7 +17,7 @@ from utils import AverageMeter
 import logging
 import imageio
 import config
-
+from utils import DeToneSimple_muLaw
 
 def get_lr(args, iters):
     ratio = 0.5 * (1.0 + np.cos(iters / (args.epochs * args.iters_per_epoch) * math.pi))
@@ -99,6 +99,13 @@ def train(args, ddp_model):
 
             if (iters+1) % 100 == 0 and local_rank == 0:
                 logger.info('epoch:{}/{} iter:{}/{} time:{:.2f}+{:.2f} lr:{:.5e} loss_rec:{:.4e} loss_geo:{:.4e} loss_dis:{:.4e}'.format(epoch+1, args.epochs, iters+1, args.epochs * args.iters_per_epoch, data_time_interval, train_time_interval, lr, avg_rec.avg, avg_geo.avg, avg_dis.avg))
+
+                if config.useTonemap:
+                    img0 = DeToneSimple_muLaw(img0)
+                    imgt = DeToneSimple_muLaw(imgt)
+                    img1 = DeToneSimple_muLaw(img1)
+                    imgt_pred = DeToneSimple_muLaw(imgt_pred)
+                    img_warped = DeToneSimple_muLaw(img_warped)
 
                 saveExr(os.path.join(img_path, '{:08d}_img0.exr'.format(iters)), img0[0])
                 saveExr(os.path.join(img_path, '{:08d}_imgt.exr'.format(iters)), imgt[0])

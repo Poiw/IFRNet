@@ -391,6 +391,13 @@ class Model_extrapolation(nn.Module):
         flow_level_3 = 0.125 * resize(flow, scale_factor=0.125)
         flow_level_4 = 0.0625 * resize(flow, scale_factor=0.0625)
 
+        # # Ablation of removing flow inputs
+        # flow_level_1 = flow_level_1 * 0.
+        # flow_level_2 = flow_level_2 * 0.
+        # flow_level_3 = flow_level_3 * 0.
+        # flow_level_4 = flow_level_4 * 0.
+        
+
 
         out4 = self.decoder4(f0_4, f1_4, flow_level_4)
         up_flow0_4 = out4[:, 0:2]
