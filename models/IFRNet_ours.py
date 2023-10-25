@@ -568,3 +568,269 @@ class Model_Falcor_extrapolation(nn.Module):
             loss_dis = 0.00 * loss_geo
 
         return imgt_pred, imgt_warped, loss_rec, loss_geo, loss_dis
+    
+def KernelFilter(input, kernel):
+
+    assert kernel.shape[1] == 9
+
+    kernel = kernel.view(kernel.shape[0], 1, kernel.shape[1], kernel.shape[2], kernel.shape[3])
+
+    img_shape = input.shape[2:]
+
+    pad_input = F.pad(input, (1, 1, 1, 1), mode='reflect')
+
+    pad_input = pad_input.view(pad_input.shape[0], pad_input.shape[1], 1, pad_input.shape[2], pad_input.shape[3])
+
+    concated_input = torch.cat([pad_input[:, :, :, i:i+img_shape[0], j:j+img_shape[1]] for i in range(3) for j in range(3)], dim=2)
+
+    return torch.mean(concated_input * kernel, dim=2)
+
+class HKPNet_v2(nn.Module):
+
+    def __init__(self, input_channel=6):
+        super(HKPNet_v2, self).__init__()
+
+
+        self.l1_loss = Charbonnier_L1()
+        self.tr_loss = Ternary(7)
+
+        self.conv1 = nn.Sequential(
+            nn.Conv2d(input_channel, 32, kernel_size=7, stride=1, padding=3),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.conv2 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.conv3 = nn.Sequential(
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 96, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.conv4 = nn.Sequential(
+            nn.Conv2d(96, 96, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(96, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.conv5 = nn.Sequential(
+            nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.upconv4 = nn.Sequential(
+            nn.Conv2d(256+128, 256, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.upconv3 = nn.Sequential(
+            nn.Conv2d(128+96, 128, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 96, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.upconv2 = nn.Sequential(
+            nn.Conv2d(96+64, 96, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(96, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.upconv1 = nn.Sequential(
+            nn.Conv2d(64+64, 64, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1),
+            nn.ReLU(inplace=True)
+        )
+
+        self.feat_conv5 = nn.Sequential(
+            nn.Conv2d(256, 128, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(128, 9, kernel_size=1, stride=1, padding=0),
+        )
+
+        self.feat_conv4 = nn.Sequential(
+            nn.Conv2d(128, 64, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(64, 19, kernel_size=1, stride=1, padding=0),
+        )
+
+        self.feat_conv3 = nn.Sequential(
+            nn.Conv2d(96, 32, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 19, kernel_size=1, stride=1, padding=0),
+        )
+
+        self.feat_conv2 = nn.Sequential(
+            nn.Conv2d(64, 32, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 19, kernel_size=1, stride=1, padding=0),
+        )
+
+        self.feat_conv1 = nn.Sequential(
+            nn.Conv2d(32, 32, kernel_size=1, stride=1, padding=0),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(32, 19, kernel_size=1, stride=1, padding=0),
+        )
+
+
+        self.maxpool = nn.MaxPool2d(kernel_size=2, stride=2)
+        self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True)
+
+    def forward(self, img0, img1, imgt, flow):
+
+        input = img0[:, 3:]
+
+        h, w = input.shape[2:4]
+        
+        if h % 16 != 0 or w % 16 != 0:
+
+            hh = int(np.ceil(h / 16) * 16) - h
+            up = hh // 2
+            down = hh - up
+
+            ww = int(np.ceil(w / 16) * 16) - w
+            left = ww // 2
+            right = ww - left
+
+            input = F.pad(input, (left, right, up, down), mode='replicate')
+
+        render = input[:, 0:3, :, :]
+
+        x1 = self.conv1(input)
+        x2 = self.conv2(self.maxpool(x1))
+        x3 = self.conv3(self.maxpool(x2))
+        x4 = self.conv4(self.maxpool(x3))
+        x5 = self.conv5(self.maxpool(x4))
+
+        ux4 = self.upconv4(torch.cat([self.upsample(x5), x4], dim=1))
+        ux3 = self.upconv3(torch.cat([self.upsample(ux4), x3], dim=1))
+        ux2 = self.upconv2(torch.cat([self.upsample(ux3), x2], dim=1))
+        ux1 = self.upconv1(torch.cat([self.upsample(ux2), x1], dim=1))
+
+        kernel5 = self.feat_conv5(x5)
+        kernel4 = self.feat_conv4(ux4)
+        kernel3 = self.feat_conv3(ux3)
+        kernel2 = self.feat_conv2(ux2)
+        kernel1 = self.feat_conv1(ux1)
+
+        # down_k1, up_k1, blend_weight1 = torch.clamp(kernel1[:, :9, :, :], -1, 1), torch.clamp(kernel1[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel1[:, 18:, :, :])
+        # down_k2, up_k2, blend_weight2 = torch.clamp(kernel2[:, :9, :, :], -1, 1), torch.clamp(kernel2[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel2[:, 18:, :, :])
+        # down_k3, up_k3, blend_weight3 = torch.clamp(kernel3[:, :9, :, :], -1, 1), torch.clamp(kernel3[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel3[:, 18:, :, :])
+        # down_k4, up_k4, blend_weight4 = torch.clamp(kernel4[:, :9, :, :], -1, 1), torch.clamp(kernel4[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel4[:, 18:, :, :])
+        
+        down_k1, up_k1, blend_weight1 = kernel1[:, :9, :, :], kernel1[:, 9:18, :, :], torch.sigmoid(kernel1[:, 18:, :, :])
+        down_k2, up_k2, blend_weight2 = kernel2[:, :9, :, :], kernel2[:, 9:18, :, :], torch.sigmoid(kernel2[:, 18:, :, :])
+        down_k3, up_k3, blend_weight3 = kernel3[:, :9, :, :], kernel3[:, 9:18, :, :], torch.sigmoid(kernel3[:, 18:, :, :])
+        down_k4, up_k4, blend_weight4 = kernel4[:, :9, :, :], kernel4[:, 9:18, :, :], torch.sigmoid(kernel4[:, 18:, :, :])
+        
+        down1 = KernelFilter(render, down_k1)
+        down2 = KernelFilter(self.avgpool(down1), down_k2)
+        down3 = KernelFilter(self.avgpool(down2), down_k3)
+        down4 = KernelFilter(self.avgpool(down3), down_k4)
+        down5 = KernelFilter(self.avgpool(down4), kernel5)
+
+        up4 = KernelFilter(self.upsample(down5), up_k4)
+        up4 = up4 * blend_weight4 + down4 * (1 - blend_weight4)
+
+        up3 = KernelFilter(self.upsample(up4), up_k3)
+        up3 = up3 * blend_weight3 + down3 * (1 - blend_weight3)
+
+        up2 = KernelFilter(self.upsample(up3), up_k2)
+        up2 = up2 * blend_weight2 + down2 * (1 - blend_weight2)
+
+        up1 = KernelFilter(self.upsample(up2), up_k1)
+        up1 = up1 * blend_weight1 + down1 * (1 - blend_weight1)
+
+        
+        if w % 16 != 0 or h % 16 != 0:
+            res = up1[:, :, up:up+h, left:left+w]
+        else:
+            res = up1
+
+        loss_rec = self.l1_loss(res - imgt[:, :3]) + self.tr_loss(res, imgt[:, :3])
+        
+
+        return res, torch.cat([res, res], dim=1), loss_rec, torch.tensor(0.).cuda(), torch.tensor(0.).cuda()
+
+    
+    def inference(self, input):
+
+        h, w = input.shape[2:4]
+        
+        if h % 16 != 0 or w % 16 != 0:
+
+            hh = int(np.ceil(h / 16) * 16) - h
+            up = hh // 2
+            down = hh - up
+
+            ww = int(np.ceil(w / 16) * 16) - w
+            left = ww // 2
+            right = ww - left
+
+            input = F.pad(input, (left, right, up, down), mode='replicate')
+
+        render = input[:, 3:6, :, :]
+
+        x1 = self.conv1(input)
+        x2 = self.conv2(self.maxpool(x1))
+        x3 = self.conv3(self.maxpool(x2))
+        x4 = self.conv4(self.maxpool(x3))
+        x5 = self.conv5(self.maxpool(x4))
+
+        ux4 = self.upconv4(torch.cat([self.upsample(x5), x4], dim=1))
+        ux3 = self.upconv3(torch.cat([self.upsample(ux4), x3], dim=1))
+        ux2 = self.upconv2(torch.cat([self.upsample(ux3), x2], dim=1))
+        ux1 = self.upconv1(torch.cat([self.upsample(ux2), x1], dim=1))
+
+        kernel5 = self.feat_conv5(x5)
+        kernel4 = self.feat_conv4(ux4)
+        kernel3 = self.feat_conv3(ux3)
+        kernel2 = self.feat_conv2(ux2)
+        kernel1 = self.feat_conv1(ux1)
+
+        down_k1, up_k1, blend_weight1 = torch.clamp(kernel1[:, :9, :, :], -1, 1), torch.clamp(kernel1[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel1[:, 18:, :, :])
+        down_k2, up_k2, blend_weight2 = torch.clamp(kernel2[:, :9, :, :], -1, 1), torch.clamp(kernel2[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel2[:, 18:, :, :])
+        down_k3, up_k3, blend_weight3 = torch.clamp(kernel3[:, :9, :, :], -1, 1), torch.clamp(kernel3[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel3[:, 18:, :, :])
+        down_k4, up_k4, blend_weight4 = torch.clamp(kernel4[:, :9, :, :], -1, 1), torch.clamp(kernel4[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel4[:, 18:, :, :])
+        
+        down1 = KernelFilter(render, down_k1)
+        down2 = KernelFilter(self.avgpool(down1), down_k2)
+        down3 = KernelFilter(self.avgpool(down2), down_k3)
+        down4 = KernelFilter(self.avgpool(down3), down_k4)
+        down5 = KernelFilter(self.avgpool(down4), kernel5)
+
+        up4 = KernelFilter(self.upsample(down5), up_k4)
+        up4 = up4 * blend_weight4 + down4 * (1 - blend_weight4)
+
+        up3 = KernelFilter(self.upsample(up4), up_k3)
+        up3 = up3 * blend_weight3 + down3 * (1 - blend_weight3)
+
+        up2 = KernelFilter(self.upsample(up3), up_k2)
+        up2 = up2 * blend_weight2 + down2 * (1 - blend_weight2)
+
+        up1 = KernelFilter(self.upsample(up2), up_k1)
+        up1 = up1 * blend_weight1 + down1 * (1 - blend_weight1)
+
+        
+        if w % 16 != 0 or h % 16 != 0:
+            res = up1[:, :, up:up+h, left:left+w]
+        else:
+            res = up1
+
+        return res, [blend_weight1, blend_weight2, blend_weight3, blend_weight4], [up1, up2, up3, up4], [down1, down2, down3, down4]

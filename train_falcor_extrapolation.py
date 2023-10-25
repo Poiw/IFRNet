@@ -184,7 +184,7 @@ if __name__ == '__main__':
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.benchmark = True
 
-    from models.IFRNet_ours import Model_Falcor_extrapolation as Model
+    from models.IFRNet_ours import HKPNet_v2 as Model
 
     args.log_path = config.log_path
     args.num_workers = args.batch_size
