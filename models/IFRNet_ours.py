@@ -49,10 +49,10 @@ class ResBlock(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channel=3):
         super(Encoder, self).__init__()
         self.pyramid1 = nn.Sequential(
-            convrelu(3, 24, 3, 2, 1), 
+            convrelu(in_channel, 24, 3, 2, 1), 
             convrelu(24, 24, 3, 1, 1)
         )
         self.pyramid2 = nn.Sequential(
@@ -437,6 +437,132 @@ class Model_extrapolation(nn.Module):
             loss_dis += 0.01 * (self.rb_loss(8.0 * resize(up_flow0_4, 8.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(8.0 * resize(up_flow1_4, 8.0) - flow[:, 2:4], weight=robust_weight1))
             warped_0 = warp(img0 + mean_, flow[:, 0:2])
             warped_1 = warp(img1 + mean_, flow[:, 2:4])
+            imgt_warped = torch.cat([warped_0, warped_1], 1)
+        else:
+            loss_dis = 0.00 * loss_geo
+
+        return imgt_pred, imgt_warped, loss_rec, loss_geo, loss_dis
+    
+
+class Model_Falcor_extrapolation(nn.Module):
+    def __init__(self, local_rank=-1, lr=1e-4):
+        super(Model_Falcor_extrapolation, self).__init__()
+        self.encoder = Encoder(in_channel=9)
+        self.decoder4 = Decoder4_wMV()
+        self.decoder3 = Decoder3_wMV()
+        self.decoder2 = Decoder2_wMV()
+        self.decoder1 = Decoder1_wMV()
+        self.l1_loss = Charbonnier_L1()
+        self.tr_loss = Ternary(7)
+        self.rb_loss = Charbonnier_Ada()
+        self.gc_loss = Geometry(3)
+
+
+    def inference(self, img0, img1, flow):
+        mean_ = torch.cat([img0, img1], 2).mean(1, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
+        img0 = img0 - mean_
+        img1 = img1 - mean_
+
+        f0_1, f0_2, f0_3, f0_4 = self.encoder(img0)
+        f1_1, f1_2, f1_3, f1_4 = self.encoder(img1)
+
+        flow_level_1 = 0.5 * resize(flow, scale_factor=0.5)
+        flow_level_2 = 0.25 * resize(flow, scale_factor=0.25)
+        flow_level_3 = 0.125 * resize(flow, scale_factor=0.125)
+        flow_level_4 = 0.0625 * resize(flow, scale_factor=0.0625)
+
+
+        out4 = self.decoder4(f0_4, f1_4, flow_level_4)
+        up_flow0_4 = out4[:, 0:2]
+        up_flow1_4 = out4[:, 2:4]
+        ft_3_ = out4[:, 4:]
+
+        out3 = self.decoder3(ft_3_, f0_3, f1_3, up_flow0_4, up_flow1_4, flow_level_3)
+        up_flow0_3 = out3[:, 0:2] + 2.0 * resize(up_flow0_4, scale_factor=2.0)
+        up_flow1_3 = out3[:, 2:4] + 2.0 * resize(up_flow1_4, scale_factor=2.0)
+        ft_2_ = out3[:, 4:]
+
+        out2 = self.decoder2(ft_2_, f0_2, f1_2, up_flow0_3, up_flow1_3, flow_level_2)
+        up_flow0_2 = out2[:, 0:2] + 2.0 * resize(up_flow0_3, scale_factor=2.0)
+        up_flow1_2 = out2[:, 2:4] + 2.0 * resize(up_flow1_3, scale_factor=2.0)
+        ft_1_ = out2[:, 4:]
+
+        out1 = self.decoder1(ft_1_, f0_1, f1_1, up_flow0_2, up_flow1_2, flow_level_1)
+        up_flow0_1 = out1[:, 0:2] + 2.0 * resize(up_flow0_2, scale_factor=2.0)
+        up_flow1_1 = out1[:, 2:4] + 2.0 * resize(up_flow1_2, scale_factor=2.0)
+        up_mask_1 = torch.sigmoid(out1[:, 4:5])
+        up_res_1 = out1[:, 5:]
+        
+        img0_warp = warp(img0, up_flow0_1)
+        img1_warp = warp(img1, up_flow1_1)
+        imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
+        imgt_pred = imgt_merge + up_res_1
+        # imgt_pred = torch.clamp(imgt_pred, 0, 1)
+
+        return imgt_pred
+
+
+    def forward(self, img0, img1, imgt, flow):
+        mean_ = torch.cat([img0, img1], 2).mean(1, keepdim=True).mean(2, keepdim=True).mean(3, keepdim=True)
+        img0 = img0 - mean_
+        img1 = img1 - mean_
+        imgt_ = imgt - mean_
+
+        f0_1, f0_2, f0_3, f0_4 = self.encoder(img0)
+        f1_1, f1_2, f1_3, f1_4 = self.encoder(img1)
+        ft_1, ft_2, ft_3, ft_4 = self.encoder(imgt_)
+
+        flow_level_1 = 0.5 * resize(flow, scale_factor=0.5)
+        flow_level_2 = 0.25 * resize(flow, scale_factor=0.25)
+        flow_level_3 = 0.125 * resize(flow, scale_factor=0.125)
+        flow_level_4 = 0.0625 * resize(flow, scale_factor=0.0625)
+
+        # # Ablation of removing flow inputs
+        # flow_level_1 = flow_level_1 * 0.
+        # flow_level_2 = flow_level_2 * 0.
+        # flow_level_3 = flow_level_3 * 0.
+        # flow_level_4 = flow_level_4 * 0.
+        
+
+
+        out4 = self.decoder4(f0_4, f1_4, flow_level_4)
+        up_flow0_4 = out4[:, 0:2]
+        up_flow1_4 = out4[:, 2:4]
+        ft_3_ = out4[:, 4:]
+
+        out3 = self.decoder3(ft_3_, f0_3, f1_3, up_flow0_4, up_flow1_4, flow_level_3)
+        up_flow0_3 = out3[:, 0:2] + 2.0 * resize(up_flow0_4, scale_factor=2.0)
+        up_flow1_3 = out3[:, 2:4] + 2.0 * resize(up_flow1_4, scale_factor=2.0)
+        ft_2_ = out3[:, 4:]
+
+        out2 = self.decoder2(ft_2_, f0_2, f1_2, up_flow0_3, up_flow1_3, flow_level_2)
+        up_flow0_2 = out2[:, 0:2] + 2.0 * resize(up_flow0_3, scale_factor=2.0)
+        up_flow1_2 = out2[:, 2:4] + 2.0 * resize(up_flow1_3, scale_factor=2.0)
+        ft_1_ = out2[:, 4:]
+
+        out1 = self.decoder1(ft_1_, f0_1, f1_1, up_flow0_2, up_flow1_2, flow_level_1)
+        up_flow0_1 = out1[:, 0:2] + 2.0 * resize(up_flow0_2, scale_factor=2.0)
+        up_flow1_1 = out1[:, 2:4] + 2.0 * resize(up_flow1_2, scale_factor=2.0)
+        up_mask_1 = torch.sigmoid(out1[:, 4:5])
+        up_res_1 = out1[:, 5:]
+        
+        img0_warp = warp(img0[:, :3], up_flow0_1)
+        img1_warp = warp(img1[:, :3], up_flow1_1)
+        imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
+        imgt_pred = imgt_merge + up_res_1
+        # imgt_pred = torch.clamp(imgt_pred, 0, 1)
+
+        loss_rec = self.l1_loss(imgt_pred - imgt[:, :3]) + self.tr_loss(imgt_pred, imgt[:, :3])
+        loss_geo = 0.01 * (self.gc_loss(ft_1_, ft_1) + self.gc_loss(ft_2_, ft_2) + self.gc_loss(ft_3_, ft_3))
+        imgt_warped = None
+        if flow is not None:
+            robust_weight0 = get_robust_weight(up_flow0_1, flow[:, 0:2], beta=0.3)
+            robust_weight1 = get_robust_weight(up_flow1_1, flow[:, 2:4], beta=0.3)
+            loss_dis = 0.01 * (self.rb_loss(2.0 * resize(up_flow0_2, 2.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(2.0 * resize(up_flow1_2, 2.0) - flow[:, 2:4], weight=robust_weight1))
+            loss_dis += 0.01 * (self.rb_loss(4.0 * resize(up_flow0_3, 4.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(4.0 * resize(up_flow1_3, 4.0) - flow[:, 2:4], weight=robust_weight1))
+            loss_dis += 0.01 * (self.rb_loss(8.0 * resize(up_flow0_4, 8.0) - flow[:, 0:2], weight=robust_weight0) + self.rb_loss(8.0 * resize(up_flow1_4, 8.0) - flow[:, 2:4], weight=robust_weight1))
+            warped_0 = warp(img0[:, :3] + mean_, flow[:, 0:2])
+            warped_1 = warp(img1[:, :3] + mean_, flow[:, 2:4])
             imgt_warped = torch.cat([warped_0, warped_1], 1)
         else:
             loss_dis = 0.00 * loss_geo

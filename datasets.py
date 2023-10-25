@@ -31,9 +31,27 @@ def random_crop(img0, imgt, img1, flow, crop_size=(224, 224)):
 
 def random_reverse_channel(img0, imgt, img1, flow, p=0.5):
     if random.uniform(0, 1) < p:
-        img0 = img0[:, :, ::-1]
-        imgt = imgt[:, :, ::-1]
-        img1 = img1[:, :, ::-1]
+        if img0.shape[2] > 3:
+            img0_0 = img0[:, :, 0:3]
+            img0_1 = img0[:, :, 3:6]
+            img0_2 = img0[:, :, 6:9]
+            img0 = np.concatenate((img0_0[:, :, ::-1], img0_1[:, :, ::-1], img0_2[:, :, ::-1]), 2)
+        else:
+            img0 = img0[:, :, ::-1]
+        if imgt.shape[2] > 3:
+            imgt_0 = imgt[:, :, 0:3]
+            imgt_1 = imgt[:, :, 3:6]
+            imgt_2 = imgt[:, :, 6:9]
+            imgt = np.concatenate((imgt_0[:, :, ::-1], imgt_1[:, :, ::-1], imgt_2[:, :, ::-1]), 2)
+        else:
+            imgt = imgt[:, :, ::-1]
+        if img1.shape[2] > 3:
+            img1_0 = img1[:, :, 0:3]
+            img1_1 = img1[:, :, 3:6]
+            img1_2 = img1[:, :, 6:9]
+            img1 = np.concatenate((img1_0[:, :, ::-1], img1_1[:, :, ::-1], img1_2[:, :, ::-1]), 2)
+        else:
+            img1 = img1[:, :, ::-1]
     return img0, imgt, img1, flow
 
 
@@ -330,6 +348,115 @@ class Unreal_Extrapolation_Dataset(Dataset):
 
         return img0, imgt, img1, flow
 
+
+class Falcor_Extrapolation_Dataset(Dataset):
+    def __init__(self, data_dir_list, exposure = 1., augment=True):
+        self.augment = augment
+        self.img0_list = []
+        self.imgt_list = []
+        self.img1_list = []
+        self.img05_list = []
+        self.exposure = exposure
+
+        self.img_list = []
+        for data_dir in data_dir_list:
+            img_paths = glob(pjoin(data_dir, "GT.*.exr"))
+            tmp_list = []
+            for path in img_paths:
+                idx = int(os.path.basename(path).split('.')[1])
+                tmp_list.append((data_dir, idx))
+            tmp_list = sorted(tmp_list, key=lambda x: x[1], reverse=False)
+
+            self.img_list += tmp_list
+        
+        self.data_list = []
+
+
+        
+        for i in range(len(self.img_list)):
+
+            if(i==len(self.img_list)-4): # if current frame is the last img
+                break   
+
+            img_t, img_1, img_05, img_0 = self.img_list[i+3], self.img_list[i+2], self.img_list[i+1], self.img_list[i]
+
+            if img_t[0]!=img_0[0] or img_t[0]!=img_1[0]:
+                continue
+
+            if img_t[1] % 2 == 1:
+                continue
+
+            self.img0_list.append(img_0)
+            self.imgt_list.append(img_t)
+            self.img1_list.append(img_1)
+            self.img05_list.append(img_05)
+
+    def __len__(self):
+        return len(self.imgt_list)
+
+    def __getitem__(self, idx):
+
+
+        img0_path = pjoin(self.img0_list[idx][0], "Render.{:04d}.exr".format(self.img0_list[idx][1]))
+        img1_path = pjoin(self.img1_list[idx][0], "Render.{:04d}.exr".format(self.img1_list[idx][1]))
+        imgt_path = pjoin(self.imgt_list[idx][0], "Render.{:04d}.exr".format(self.imgt_list[idx][1]))
+        flow_1_path = pjoin(self.imgt_list[idx][0], "MotionVector.{:04d}.exr".format(self.imgt_list[idx][1]))
+        flow_0_path = pjoin(self.img1_list[idx][0], "MotionVector.{:04d}.exr".format(self.img1_list[idx][1]))
+        flow_05_path = pjoin(self.img05_list[idx][0], "MotionVector.{:04d}.exr".format(self.img05_list[idx][1]))
+        
+        noSplat_imgt = pjoin(self.imgt_list[idx][0], "Render_woSplat.{:04d}.exr".format(self.imgt_list[idx][1]))
+        GT_imgt = pjoin(self.imgt_list[idx][0], "GT.{:04d}.exr".format(self.imgt_list[idx][1]))
+
+        img0 = np.clip(np.array(load_exr(img0_path)), 0, 100)
+        imgt = np.clip(np.array(load_exr(imgt_path)), 0, 100)
+        img1 = np.clip(np.array(load_exr(img1_path)), 0, 100)
+        GT_imgt = np.clip(np.array(load_exr(GT_imgt)), 0, 100)
+        noSplat_imgt = np.clip(np.array(load_exr(noSplat_imgt)), -10, 100)
+        flow_1 = np.array(load_exr(flow_1_path, channel=2))
+        flow_1[..., 0] *= flow_1.shape[1]
+        flow_1[..., 1] *= flow_1.shape[0]
+        flow_1[..., 0] = flow_1[..., 0] * -1
+        flow_0 = np.array(load_exr(flow_0_path, channel=2))
+        flow_0[..., 0] *= flow_0.shape[1]
+        flow_0[..., 1] *= flow_0.shape[0]
+        flow_0[..., 0] = flow_0[..., 0] * -1
+        flow_05 = np.array(load_exr(flow_05_path, channel=2))
+        flow_05[..., 0] *= flow_05.shape[1]
+        flow_05[..., 1] *= flow_05.shape[0]
+        flow_05[..., 0] = flow_05[..., 0] * -1
+
+
+        img0 = ToneSimple_muLaw_numpy(img0 * self.exposure)
+        imgt = ToneSimple_muLaw_numpy(imgt * self.exposure)
+        img1 = ToneSimple_muLaw_numpy(img1 * self.exposure)
+        GT_imgt = ToneSimple_muLaw_numpy(GT_imgt * self.exposure)
+        noSplat_imgt = ToneSimple_muLaw_numpy(noSplat_imgt * self.exposure)
+        noSplat_imgt[noSplat_imgt < 0] = -1.
+
+        img0 = np.concatenate([img0, imgt, noSplat_imgt], 2)
+        img1 = np.concatenate([img1, imgt, noSplat_imgt], 2)
+        imgt = np.concatenate([GT_imgt, imgt, noSplat_imgt], 2)
+
+        flow_0 = flow_0 + warp_numpy(flow_1 + warp_numpy(flow_05, flow_1), flow_0)
+
+        flow = np.concatenate((flow_0, flow_1), 2)        
+    
+        if self.augment == True:
+            img0, imgt, img1, flow = random_resize(img0, imgt, img1, flow, p=0.1)
+            img0, imgt, img1, flow = random_crop(img0, imgt, img1, flow, crop_size=(512, 512))
+            img0, imgt, img1, flow = random_reverse_channel(img0, imgt, img1, flow, p=0.5)
+            img0, imgt, img1, flow = random_vertical_flip(img0, imgt, img1, flow, p=0.3)
+            img0, imgt, img1, flow = random_horizontal_flip(img0, imgt, img1, flow, p=0.5)
+            img0, imgt, img1, flow = random_rotate(img0, imgt, img1, flow, p=0.05)
+
+        img0 = torch.from_numpy(img0.transpose((2, 0, 1)).copy())
+        imgt = torch.from_numpy(imgt.transpose((2, 0, 1)).copy())
+        img1 = torch.from_numpy(img1.transpose((2, 0, 1)).copy())
+        flow = torch.from_numpy(flow.transpose((2, 0, 1)).copy().astype(np.float32))
+
+
+
+        return img0, imgt, img1, flow
 
 
 class Vimeo90K_Test_Dataset(Dataset):
