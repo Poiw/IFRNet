@@ -769,7 +769,10 @@ class HKPNet_v2(nn.Module):
         return res, torch.cat([res, res], dim=1), loss_rec, torch.tensor(0.).cuda(), torch.tensor(0.).cuda()
 
     
-    def inference(self, input):
+    def inference(self, img0, img1, flow):
+
+        
+        input = img0[:, 3:]
 
         h, w = input.shape[2:4]
         
@@ -785,7 +788,7 @@ class HKPNet_v2(nn.Module):
 
             input = F.pad(input, (left, right, up, down), mode='replicate')
 
-        render = input[:, 3:6, :, :]
+        render = input[:, 0:3, :, :]
 
         x1 = self.conv1(input)
         x2 = self.conv2(self.maxpool(x1))
@@ -804,11 +807,11 @@ class HKPNet_v2(nn.Module):
         kernel2 = self.feat_conv2(ux2)
         kernel1 = self.feat_conv1(ux1)
 
-        down_k1, up_k1, blend_weight1 = torch.clamp(kernel1[:, :9, :, :], -1, 1), torch.clamp(kernel1[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel1[:, 18:, :, :])
-        down_k2, up_k2, blend_weight2 = torch.clamp(kernel2[:, :9, :, :], -1, 1), torch.clamp(kernel2[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel2[:, 18:, :, :])
-        down_k3, up_k3, blend_weight3 = torch.clamp(kernel3[:, :9, :, :], -1, 1), torch.clamp(kernel3[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel3[:, 18:, :, :])
-        down_k4, up_k4, blend_weight4 = torch.clamp(kernel4[:, :9, :, :], -1, 1), torch.clamp(kernel4[:, 9:18, :, :], -1, 1), torch.sigmoid(kernel4[:, 18:, :, :])
-        
+        down_k1, up_k1, blend_weight1 = kernel1[:, :9, :, :], kernel1[:, 9:18, :, :], torch.sigmoid(kernel1[:, 18:, :, :])
+        down_k2, up_k2, blend_weight2 = kernel2[:, :9, :, :], kernel2[:, 9:18, :, :], torch.sigmoid(kernel2[:, 18:, :, :])
+        down_k3, up_k3, blend_weight3 = kernel3[:, :9, :, :], kernel3[:, 9:18, :, :], torch.sigmoid(kernel3[:, 18:, :, :])
+        down_k4, up_k4, blend_weight4 = kernel4[:, :9, :, :], kernel4[:, 9:18, :, :], torch.sigmoid(kernel4[:, 18:, :, :])
+                
         down1 = KernelFilter(render, down_k1)
         down2 = KernelFilter(self.avgpool(down1), down_k2)
         down3 = KernelFilter(self.avgpool(down2), down_k3)
@@ -833,4 +836,4 @@ class HKPNet_v2(nn.Module):
         else:
             res = up1
 
-        return res, [blend_weight1, blend_weight2, blend_weight3, blend_weight4], [up1, up2, up3, up4], [down1, down2, down3, down4]
+        return res
