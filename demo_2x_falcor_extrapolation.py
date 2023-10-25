@@ -2,7 +2,7 @@ import os
 os.environ["OPENCV_IO_ENABLE_OPENEXR"]="1"
 import numpy as np
 import torch
-from models.IFRNet_ours import Model_Falcor_extrapolation as Model
+from models.IFRNet_ours import HKPNet_v2 as Model
 from utils import read
 from imageio import mimsave
 import cv2
