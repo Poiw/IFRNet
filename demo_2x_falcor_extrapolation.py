@@ -79,9 +79,9 @@ if __name__ == "__main__":
                 imgt_np = load_exr(pjoin(dataDir, "Render.{}.exr".format(idx)))
                 imgt_noSplat_np = load_exr(pjoin(dataDir, "Render_woSplat.{}.exr".format(idx)))
 
-                flow_1 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx)))
-                flow_0 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx-1)))
-                flow_05 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx-2)))
+                flow_1 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx)), 2)
+                flow_0 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx-1)), 2)
+                flow_05 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx-2)), 2)
 
                 flow_1[..., 0] *= flow_1.shape[1]
                 flow_1[..., 1] *= flow_1.shape[0]
@@ -112,10 +112,10 @@ if __name__ == "__main__":
                 flow = flow[size[0]//2 - crop_size:size[0]//2 + crop_size, size[1]//2 - crop_size:size[1]//2 + crop_size, :]
                 
                 
-                img0 = (torch.tensor(img0_np.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
-                img1 = (torch.tensor(img1_np.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
+                img0 = (torch.tensor(img0.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
+                img1 = (torch.tensor(img1.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
                 flow = (torch.tensor(flow.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
-                
+
                 imgt_pred, mask = model.inference(img0, img1, flow)
                 imgt_pred = imgt_pred.clamp(0, 5)
 
