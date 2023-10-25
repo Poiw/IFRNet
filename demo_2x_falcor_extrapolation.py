@@ -79,6 +79,11 @@ if __name__ == "__main__":
                 imgt_np = load_exr(pjoin(dataDir, "Render.{}.exr".format(idx)))
                 imgt_noSplat_np = load_exr(pjoin(dataDir, "Render_woSplat.{}.exr".format(idx)))
 
+                img0_np = np.clip(img0_np, 0, 100)
+                img1_np = np.clip(img1_np, 0, 100)
+                imgt_np = np.clip(imgt_np, 0, 100)
+                imgt_noSplat_np = np.clip(imgt_noSplat_np, -10, 100)
+
                 flow_1 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx)), 2)
                 flow_0 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx-1)), 2)
                 flow_05 = load_exr(pjoin(dataDir, "MotionVector.{}.exr".format(idx-2)), 2)
@@ -101,6 +106,7 @@ if __name__ == "__main__":
                     img1_np = ToneSimple_muLaw_numpy(img1_np * config.exposure)
                     imgt_np = ToneSimple_muLaw_numpy(imgt_np * config.exposure)
                     imgt_noSplat_np = ToneSimple_muLaw_numpy(imgt_noSplat_np * config.exposure)
+                    imgt_noSplat_np[imgt_noSplat_np < 0] = -1
 
 
                 img0 = np.concatenate([img0_np, imgt_np, imgt_noSplat_np], axis=-1)
@@ -116,7 +122,7 @@ if __name__ == "__main__":
                 img1 = (torch.tensor(img1.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
                 flow = (torch.tensor(flow.transpose(2, 0, 1)).float()).unsqueeze(0).cuda()
 
-                imgt_pred, mask = model.inference(img0, img1, flow)
+                imgt_pred, residual = model.inference(img0, img1, flow)
                 imgt_pred = imgt_pred.clamp(0, 5)
 
                 if config.useTonemap:
@@ -124,10 +130,10 @@ if __name__ == "__main__":
 
 
                 img = imgt_pred[0].detach().cpu().numpy().transpose(1, 2, 0)
-                mask = mask[0].detach().cpu().numpy().transpose(1, 2, 0)
+                residual = residual[0].detach().cpu().numpy().transpose(1, 2, 0)
 
                 imageio.imwrite(pjoin(targetDir, "res.{:04d}.exr".format(idx-st)), img)
-                imageio.imwrite(pjoin(targetDir, "mask.{:04d}.exr".format(idx-st)), mask)
+                imageio.imwrite(pjoin(targetDir, "residual.{:04d}.exr".format(idx-st)), residual)
 
                 # saveExr(pjoin(targetDir, "res.{:04d}.exr".format(idx-st)), imgt_pred[0])
 
