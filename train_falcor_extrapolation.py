@@ -101,11 +101,11 @@ def train(args, ddp_model):
                 logger.info('epoch:{}/{} iter:{}/{} time:{:.2f}+{:.2f} lr:{:.5e} loss_rec:{:.4e} loss_geo:{:.4e} loss_dis:{:.4e}'.format(epoch+1, args.epochs, iters+1, args.epochs * args.iters_per_epoch, data_time_interval, train_time_interval, lr, avg_rec.avg, avg_geo.avg, avg_dis.avg))
 
                 if config.useTonemap:
-                    img0 = DeToneSimple_muLaw(img0 / config.exposure)
-                    imgt = DeToneSimple_muLaw(imgt / config.exposure)
-                    img1 = DeToneSimple_muLaw(img1 / config.exposure)
-                    imgt_pred = DeToneSimple_muLaw(imgt_pred / config.exposure)
-                    img_warped = DeToneSimple_muLaw(img_warped / config.exposure)
+                    img0 = DeToneSimple_muLaw(img0) / config.exposure
+                    imgt = DeToneSimple_muLaw(imgt) / config.exposure
+                    img1 = DeToneSimple_muLaw(img1) / config.exposure
+                    imgt_pred = DeToneSimple_muLaw(imgt_pred) / config.exposure
+                    img_warped = DeToneSimple_muLaw(img_warped) / config.exposure
 
                 saveExr(os.path.join(img_path, '{:08d}_img0.exr'.format(iters)), img0[0, :3])
                 saveExr(os.path.join(img_path, '{:08d}_imgt.exr'.format(iters)), imgt[0, :3])

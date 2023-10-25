@@ -493,13 +493,13 @@ class Model_Falcor_extrapolation(nn.Module):
         up_mask_1 = torch.sigmoid(out1[:, 4:5])
         up_res_1 = out1[:, 5:]
         
-        img0_warp = warp(img0, up_flow0_1)
-        img1_warp = warp(img1, up_flow1_1)
+        img0_warp = warp(img0[:, :3], up_flow0_1)
+        img1_warp = warp(img1[:, :3], up_flow1_1)
         imgt_merge = up_mask_1 * img0_warp + (1 - up_mask_1) * img1_warp + mean_
         imgt_pred = imgt_merge + up_res_1
         # imgt_pred = torch.clamp(imgt_pred, 0, 1)
 
-        return imgt_pred
+        return imgt_pred, up_mask_1
 
 
     def forward(self, img0, img1, imgt, flow):
