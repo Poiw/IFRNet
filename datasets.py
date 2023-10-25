@@ -415,15 +415,15 @@ class Falcor_Extrapolation_Dataset(Dataset):
         flow_1 = np.array(load_exr(flow_1_path, channel=2))
         flow_1[..., 0] *= flow_1.shape[1]
         flow_1[..., 1] *= flow_1.shape[0]
-        flow_1[..., 0] = flow_1[..., 0] * -1
+        # flow_1[..., 0] = flow_1[..., 0] * -1
         flow_0 = np.array(load_exr(flow_0_path, channel=2))
         flow_0[..., 0] *= flow_0.shape[1]
         flow_0[..., 1] *= flow_0.shape[0]
-        flow_0[..., 0] = flow_0[..., 0] * -1
+        # flow_0[..., 0] = flow_0[..., 0] * -1
         flow_05 = np.array(load_exr(flow_05_path, channel=2))
         flow_05[..., 0] *= flow_05.shape[1]
         flow_05[..., 1] *= flow_05.shape[0]
-        flow_05[..., 0] = flow_05[..., 0] * -1
+        # flow_05[..., 0] = flow_05[..., 0] * -1
 
 
         img0 = ToneSimple_muLaw_numpy(img0 * self.exposure)
@@ -437,7 +437,8 @@ class Falcor_Extrapolation_Dataset(Dataset):
         img1 = np.concatenate([img1, imgt, noSplat_imgt], 2)
         imgt = np.concatenate([GT_imgt, imgt, noSplat_imgt], 2)
 
-        flow_0 = flow_0 + warp_numpy(flow_1 + warp_numpy(flow_05, flow_1), flow_0)
+        # flow_0 = flow_0 + warp_numpy(flow_1 + warp_numpy(flow_05, flow_1), flow_0)
+        flow_0 = flow_1 + warp_numpy(flow_0 + warp_numpy(flow_05, flow_0), flow_1)
 
         flow = np.concatenate((flow_0, flow_1), 2)        
     
