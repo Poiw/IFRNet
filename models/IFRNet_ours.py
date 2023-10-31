@@ -499,7 +499,7 @@ class Model_Falcor_extrapolation(nn.Module):
         imgt_pred = imgt_merge + up_res_1
         # imgt_pred = torch.clamp(imgt_pred, 0, 1)
 
-        return imgt_pred
+        return imgt_pred, up_res_1
 
 
     def forward(self, img0, img1, imgt, flow):
