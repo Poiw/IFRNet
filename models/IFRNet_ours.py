@@ -895,10 +895,16 @@ class SplatNet(nn.Module):
         layer2 = out[:, 4:7, :, :]
 
         if step < self.mask_only_steps:
-            res = mask * inputs[:, :3] + (1 - mask) * inputs[:, 3:6]
+
+            mask_gt = torch.zeros_like(mask)
+            mask_gt[input[:, :1] > 0] = 1
+
+            loss_rec = self.l1_loss(mask - mask_gt) + self.l1_loss(layer1 - input[:, :3]) + self.l1_loss(layer2 - input[:, 3:6])
+
+            res = mask * layer1 + (1 - mask) * layer2
         else:
             res = mask * layer1 + (1 - mask) * layer2
 
-        loss_rec = self.l1_loss(res-gt)
+            loss_rec = self.l1_loss(res-gt)
 
         return loss_rec, res, mask, layer1, layer2
