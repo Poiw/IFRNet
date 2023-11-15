@@ -868,7 +868,7 @@ class SplatNet(nn.Module):
             )
 
         self.layer4 = nn.Sequential(
-                nn.Conv2d(in_channels  = 100,
+                nn.Conv2d(in_channels  = 107,
                           out_channels = 7,
                           kernel_size = (1,1)),
                 nn.Sigmoid()
@@ -888,7 +888,7 @@ class SplatNet(nn.Module):
         out1 = self.layer1(inputs)
         out = self.layer2(out1)
         out = self.layer3(out)
-        out = self.layer4(out + out1)
+        out = self.layer4(torch.cat([out + out1, inputs], dim=1))
 
         mask = torch.sigmoid(out[:, 0:1, :, :])
         layer1 = out[:, 1:4, :, :]
@@ -897,9 +897,9 @@ class SplatNet(nn.Module):
         if step < self.mask_only_steps:
 
             mask_gt = torch.zeros_like(mask)
-            mask_gt[input[:, :1] > 0] = 1
+            mask_gt[inputs[:, :1] > 0] = 1
 
-            loss_rec = self.l1_loss(mask - mask_gt) + self.l1_loss(layer1 - input[:, :3]) + self.l1_loss(layer2 - input[:, 3:6])
+            loss_rec = self.l1_loss(mask - mask_gt) + self.l1_loss(layer1 - inputs[:, :3]) + self.l1_loss(layer2 - inputs[:, 3:6])
 
             res = mask * layer1 + (1 - mask) * layer2
         else:
