@@ -883,6 +883,21 @@ class SplatNet(nn.Module):
             if isinstance(module, nn.Conv2d):
                 init_weight(module.weight)
 
+    def inference(self, inputs):
+        out1 = self.layer1(inputs)
+        out = self.layer2(out1)
+        out = self.layer3(out)
+        out = self.layer4(torch.cat([out + out1, inputs], dim=1))
+
+        mask = torch.sigmoid(out[:, 0:1, :, :])
+        layer1 = out[:, 1:4, :, :]
+        layer2 = out[:, 4:7, :, :]
+
+        res = mask * layer1 + (1 - mask) * layer2
+
+
+        return res, mask, layer1, layer2        
+
     def forward(self, inputs, gt, step):
         out1 = self.layer1(inputs)
         out = self.layer2(out1)

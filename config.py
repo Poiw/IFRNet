@@ -6,4 +6,4 @@ model = "SplatNet"
 useTonemap = True
 exposure = 1.0
 
-maskOnlySteps = 10000
+maskOnlySteps = 3000

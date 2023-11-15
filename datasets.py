@@ -532,7 +532,7 @@ class Falcor_Extrapolation_Dataset(Dataset):
     
 
 class Splat_Dataset(Dataset):
-    def __init__(self, data_dir_list, exposure = 1., augment=True):
+    def __init__(self, data_dir_list, exposure = 1., augment=True, loadAll = False):
         self.augment = augment
         self.img_list = []
         self.exposure = exposure
@@ -543,11 +543,14 @@ class Splat_Dataset(Dataset):
             tmp_list = []
             for path in img_paths:
                 idx = int(os.path.basename(path).split('.')[1])
-                if idx % 2 == 0:
+                if idx % 2 == 0 or loadAll:
                     tmp_list.append((data_dir, idx))
             tmp_list = sorted(tmp_list, key=lambda x: x[1], reverse=False)
 
             self.img_list += tmp_list
+
+        if loadAll and self.img_list[0][1] % 2 == 1:
+            self.img_list = self.img_list[1:]
 
     def __len__(self):
         return len(self.img_list)
