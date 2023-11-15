@@ -840,7 +840,7 @@ class HKPNet_v2(nn.Module):
 
 
 class SplatNet(nn.Module):
-    def __init__(self):
+    def __init__(self, MaskOnlySteps = 0):
         super(SplatNet, self).__init__()
 
         self.layer1 = nn.Sequential(
@@ -878,11 +878,13 @@ class SplatNet(nn.Module):
         
         init_weight = nn.init.xavier_normal
 
+        self.mask_only_steps = MaskOnlySteps
+
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
                 init_weight(module.weight)
 
-    def forward(self, inputs, gt):
+    def forward(self, inputs, gt, step):
         out1 = self.layer1(inputs)
         out = self.layer2(out1)
         out = self.layer3(out)
@@ -892,7 +894,10 @@ class SplatNet(nn.Module):
         layer1 = out[:, 1:4, :, :]
         layer2 = out[:, 4:7, :, :]
 
-        res = mask * layer1 + (1 - mask) * layer2
+        if step < self.mask_only_steps:
+            res = mask * inputs[:, :3] + (1 - mask) * inputs[:, 3:6]
+        else:
+            res = mask * layer1 + (1 - mask) * layer2
 
         loss_rec = self.l1_loss(res-gt)
 

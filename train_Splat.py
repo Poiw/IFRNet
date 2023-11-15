@@ -88,7 +88,7 @@ def train(args, ddp_model):
             set_lr(optimizer, lr)
             optimizer.zero_grad()
 
-            loss_rec, img_pred, layer1, layer2, mask = ddp_model(torch.cat([img, img_noSplat, depth], dim=1), gt)
+            loss_rec, img_pred, layer1, layer2, mask = ddp_model(torch.cat([img, img_noSplat, depth], dim=1), gt, iters)
 
             loss = loss_rec
             loss.backward()
@@ -163,7 +163,7 @@ if __name__ == '__main__':
     args.log_path = config.log_path
     args.num_workers = args.batch_size
 
-    model = Model().to(args.device)
+    model = Model(config.maskOnlySteps).to(args.device)
     
     if args.resume_epoch != 0:
         model.load_state_dict(torch.load(args.resume_path, map_location='cpu'))
