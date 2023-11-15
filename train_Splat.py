@@ -88,7 +88,7 @@ def train(args, ddp_model):
             set_lr(optimizer, lr)
             optimizer.zero_grad()
 
-            loss_rec, img_pred, layer1, layer2, mask = ddp_model(torch.cat([img, img_noSplat, depth], dim=1), gt, iters)
+            loss_rec, img_pred, mask, layer1, layer2 = ddp_model(torch.cat([img, img_noSplat, depth], dim=1), gt, iters)
 
             loss = loss_rec
             loss.backward()
