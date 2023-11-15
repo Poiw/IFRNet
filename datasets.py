@@ -391,6 +391,13 @@ class Falcor_Extrapolation_Dataset(Dataset):
             self.img1_list.append(img_1)
             self.img05_list.append(img_05)
 
+        if len(self.img0_list) < 10000:
+            scale = 10000 // len(self.img0_list)
+            self.img0_list = self.img0_list * scale
+            self.imgt_list = self.imgt_list * scale
+            self.img1_list = self.img1_list * scale
+            self.img05_list = self.img05_list * scale
+
     def __len__(self):
         return len(self.imgt_list)
 
