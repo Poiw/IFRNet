@@ -871,7 +871,6 @@ class SplatNet(nn.Module):
                 nn.Conv2d(in_channels  = 107,
                           out_channels = 7,
                           kernel_size = (1,1)),
-                nn.Sigmoid()
             )
         
         self.l1_loss = Charbonnier_L1()
