@@ -112,6 +112,8 @@ def train(args, ddp_model):
                     layer1 = DeToneSimple_muLaw(layer1) / config.exposure
                     layer2 = DeToneSimple_muLaw(layer2) / config.exposure
 
+                    gt = DeToneSimple_muLaw(gt) / config.exposure
+
                 saveExr(os.path.join(img_path, '{:08d}_img.exr'.format(iters)), img[0])
                 saveExr(os.path.join(img_path, '{:08d}_img_noSplat.exr'.format(iters)), img_noSplat[0])
                 saveExr(os.path.join(img_path, '{:08d}_img_pred.exr'.format(iters)), img_pred[0])
