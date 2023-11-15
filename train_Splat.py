@@ -99,6 +99,7 @@ def train(args, ddp_model):
 
             if (iters+1) % 10 == 0 and local_rank == 0:
                 writer.add_scalar('loss', loss, writer_iter)
+                writer_iter += 1
 
             if (iters+1) % 100 == 0 and local_rank == 0:
                 logger.info('epoch:{}/{} iter:{}/{} time:{:.2f}+{:.2f} lr:{:.5e} loss_rec:{:.4e}'.format(epoch+1, args.epochs, iters+1, args.epochs * args.iters_per_epoch, data_time_interval, train_time_interval, lr, avg_rec.avg))
