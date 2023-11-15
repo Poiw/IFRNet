@@ -837,3 +837,63 @@ class HKPNet_v2(nn.Module):
             res = up1
 
         return res
+
+
+class SplatNet(nn.Module):
+    def __init__(self):
+        super(SplatNet, self).__init__()
+
+        self.layer1 = nn.Sequential(
+                nn.Conv2d(in_channels  = 7,
+                          out_channels = 100,
+                          kernel_size = (7,7),
+                          padding=(3,3)),
+                nn.ReLU()
+            )
+            
+        self.layer2 = nn.Sequential(
+                nn.Conv2d(in_channels  = 100,
+                          out_channels = 100,
+                          kernel_size = (5,5),
+                          padding=(2,2)),
+                nn.ReLU()
+            )
+
+        self.layer3 = nn.Sequential(
+                nn.Conv2d(in_channels  = 100,
+                          out_channels = 100,
+                          kernel_size = (3,3),
+                          padding=(1,1)),
+                nn.ReLU()
+            )
+
+        self.layer4 = nn.Sequential(
+                nn.Conv2d(in_channels  = 100,
+                          out_channels = 7,
+                          kernel_size = (1,1)),
+                nn.Sigmoid()
+            )
+        
+        self.l1_loss = Charbonnier_L1()
+        
+        init_weight = nn.init.xavier_normal
+
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                init_weight(module.weight)
+
+    def forward(self, inputs, gt):
+        out1 = self.layer1(inputs)
+        out = self.layer2(out1)
+        out = self.layer3(out)
+        out = self.layer4(out + out1)
+
+        mask = torch.sigmoid(out[:, 0:1, :, :])
+        layer1 = out[:, 1:4, :, :]
+        layer2 = out[:, 4:7, :, :]
+
+        res = mask * layer1 + (1 - mask) * layer2
+
+        loss_rec = self.l1_loss(res-gt)
+
+        return loss_rec, res, mask, layer1, layer2

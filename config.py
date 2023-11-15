@@ -1,7 +1,7 @@
-dataDir = ["/mnt/SATA_DISK_1/Songyin/RemoteRendering/Dataset/231024/ZeroDay"]
+dataDir = ["/mnt/SATA_DISK_1/Songyin/RemoteRendering/Dataset/Bunker_BlendSplat"]
 
-log_path = "/mnt/SATA_DISK_1/Songyin/ExtraSS/IFRNet_Extrapolation/Falcor_ZeroDay_IFRNet"
+log_path = "/mnt/SATA_DISK_1/Songyin/RemoteRendering/TrainLogs/SplatNet"
 
-model = "IFRNet"
+model = "SplatNet"
 useTonemap = True
-exposure = 100.0
+exposure = 1.0

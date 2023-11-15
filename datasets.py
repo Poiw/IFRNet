@@ -17,6 +17,17 @@ def random_resize(img0, imgt, img1, flow, p=0.1):
     return img0, imgt, img1, flow
 
 
+def random_resize(img_list, p=0.1):
+    res_list = []
+    if random.uniform(0, 1) < p:
+        for img in img_list:
+            img0 = cv2.resize(img, dsize=None, fx=2.0, fy=2.0, interpolation=cv2.INTER_LINEAR)
+            res_list.append(img0)
+    else:
+        res_list = img_list
+    return res_list
+
+
 def random_crop(img0, imgt, img1, flow, crop_size=(224, 224)):
     h, w = crop_size[0], crop_size[1]
     ih, iw, _ = img0.shape
@@ -28,6 +39,18 @@ def random_crop(img0, imgt, img1, flow, crop_size=(224, 224)):
     flow = flow[x:x+h, y:y+w, :]
     return img0, imgt, img1, flow
 
+def random_crop(img_list, crop_size=(224, 224)):
+
+    res_list = []
+    h, w = crop_size[0], crop_size[1]
+    ih, iw, _ = img_list[0].shape
+    x = np.random.randint(0, ih-h+1)
+    y = np.random.randint(0, iw-w+1)
+    for img in img_list:
+        img0 = img[x:x+h, y:y+w, :]
+        res_list.append(img0)
+
+    return res_list
 
 def random_reverse_channel(img0, imgt, img1, flow, p=0.5):
     if random.uniform(0, 1) < p:
@@ -55,6 +78,17 @@ def random_reverse_channel(img0, imgt, img1, flow, p=0.5):
     return img0, imgt, img1, flow
 
 
+def random_reverse_channel(img_list, p=0.5):
+    res_list = []
+    if random.uniform(0, 1) < p:
+        for img in img_list:
+            img0 = img[:, :, ::-1]
+            res_list.append(img0)
+    else:
+        res_list = img_list
+
+    return res_list
+
 def random_vertical_flip(img0, imgt, img1, flow, p=0.3):
     if random.uniform(0, 1) < p:
         img0 = img0[::-1]
@@ -63,6 +97,16 @@ def random_vertical_flip(img0, imgt, img1, flow, p=0.3):
         flow = flow[::-1]
         flow = np.concatenate((flow[:, :, 0:1], -flow[:, :, 1:2], flow[:, :, 2:3], -flow[:, :, 3:4]), 2)
     return img0, imgt, img1, flow
+
+def random_vertical_flip(img_list, p=0.3):
+    res_list = []
+    if random.uniform(0, 1) < p:
+        for img in img_list:
+            img0 = img[::-1]
+            res_list.append(img0)
+    else:
+        res_list = img_list
+    return res_list
 
 def random_vertical_flip_single(img0, imgt, img1, flow, p=0.3):
     if random.uniform(0, 1) < p:
@@ -83,6 +127,16 @@ def random_horizontal_flip(img0, imgt, img1, flow, p=0.5):
         flow = np.concatenate((-flow[:, :, 0:1], flow[:, :, 1:2], -flow[:, :, 2:3], flow[:, :, 3:4]), 2)
     return img0, imgt, img1, flow
 
+def random_horizontal_flip(img_list, p=0.5):
+    res_list = []
+    if random.uniform(0, 1) < p:
+        for img in img_list:
+            img0 = img[:, ::-1]
+            res_list.append(img0)
+    else:
+        res_list = img_list
+    return res_list
+
 def random_horizontal_flip_single(img0, imgt, img1, flow, p=0.5):
     if random.uniform(0, 1) < p:
         img0 = img0[:, ::-1]
@@ -100,6 +154,16 @@ def random_rotate(img0, imgt, img1, flow, p=0.05):
         flow = flow.transpose((1, 0, 2))
         flow = np.concatenate((flow[:, :, 1:2], flow[:, :, 0:1], flow[:, :, 3:4], flow[:, :, 2:3]), 2)
     return img0, imgt, img1, flow
+
+def random_rotate(img_list, p=0.05):
+    res_list = []
+    if random.uniform(0, 1) < p:
+        for img in img_list:
+            img0 = img.transpose((1, 0, 2))
+            res_list.append(img0)
+    else:
+        res_list = img_list
+    return res_list
 
 def random_rotate_single(img0, imgt, img1, flow, p=0.05):
     if random.uniform(0, 1) < p:
@@ -465,6 +529,69 @@ class Falcor_Extrapolation_Dataset(Dataset):
 
 
         return img0, imgt, img1, flow
+    
+
+class Splat_Dataset(Dataset):
+    def __init__(self, data_dir_list, exposure = 1., augment=True):
+        self.augment = augment
+        self.img_list = []
+        self.exposure = exposure
+
+        self.img_list = []
+        for data_dir in data_dir_list:
+            img_paths = glob(pjoin(data_dir, "GT.*.exr"))
+            tmp_list = []
+            for path in img_paths:
+                idx = int(os.path.basename(path).split('.')[1])
+                if idx % 2 == 0:
+                    tmp_list.append((data_dir, idx))
+            tmp_list = sorted(tmp_list, key=lambda x: x[1], reverse=False)
+
+            self.img_list += tmp_list
+
+    def __len__(self):
+        return len(self.img_list)
+
+    def __getitem__(self, idx):
+
+
+        img_path = pjoin(self.img_list[idx][0], "Render.{:04d}.exr".format(self.img_list[idx][1]))
+        img_noSplat_path = pjoin(self.img_list[idx][0], "Render_woSplat.{:04d}.exr".format(self.img_list[idx][1]))
+        Depth_path = pjoin(self.img_list[idx][0], "LinearZ.{:04d}.exr".format(self.img_list[idx][1]))
+        GT_path = pjoin(self.img_list[idx][0], "GT.{:04d}.exr".format(self.img_list[idx][1]))
+
+        img = np.clip(np.array(load_exr(img_path)), -10, 100)
+        img_noSplat = np.clip(np.array(load_exr(img_noSplat_path)), -10, 100)
+        Depth = np.array(load_exr(Depth_path))[..., :1]
+        GT = np.clip(np.array(load_exr(GT_path)), 0, 100)
+
+        img = ToneSimple_muLaw_numpy(img * self.exposure)
+        img_noSplat = ToneSimple_muLaw_numpy(img_noSplat * self.exposure)
+        GT = ToneSimple_muLaw_numpy(GT * self.exposure)
+
+        mask = np.zeros_like(img)
+        mask[img_noSplat < 0] = 1
+
+        img = img * mask
+        img[mask == 0] = -1
+    
+        if self.augment == True:
+
+            img_list = [img, Depth, GT, img_noSplat]
+            img_list = random_crop(img_list, crop_size=(512, 512))
+            img_list = random_reverse_channel(img_list, p=0.5)
+            img_list = random_vertical_flip(img_list, p=0.3)
+            img_list = random_horizontal_flip(img_list, p=0.5)
+
+            img, Depth, GT, img_noSplat = img_list
+
+        img = torch.from_numpy(img.transpose((2, 0, 1)).copy())
+        Depth = torch.from_numpy(Depth.transpose((2, 0, 1)).copy())
+        GT = torch.from_numpy(GT.transpose((2, 0, 1)).copy())
+        img_noSplat = torch.from_numpy(img_noSplat.transpose((2, 0, 1)).copy())
+
+
+        return img, Depth, GT, img_noSplat
 
 
 class Vimeo90K_Test_Dataset(Dataset):
