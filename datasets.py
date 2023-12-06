@@ -595,6 +595,80 @@ class Splat_Dataset(Dataset):
 
 
         return img, Depth, GT, img_noSplat
+    
+
+
+class BGCollection_Dataset(Dataset):
+    def __init__(self, data_dir_list, exposure = 1., augment=True, loadAll = False):
+        self.augment = augment
+        self.img_list = []
+        self.exposure = exposure
+
+        self.img_list = []
+        for data_dir in data_dir_list:
+            img_paths = glob(pjoin(data_dir, "GT.*.exr"))
+            tmp_list = []
+            for path in img_paths:
+                idx = int(os.path.basename(path).split('.')[1])
+                if idx % 2 == 0 or loadAll:
+                    tmp_list.append((data_dir, idx))
+            tmp_list = sorted(tmp_list, key=lambda x: x[1], reverse=False)
+            tmp_list = tmp_list[2:]
+
+            self.img_list += tmp_list
+
+        if loadAll and self.img_list[0][1] % 2 == 1:
+            self.img_list = self.img_list[1:]
+
+        print("Dataset Size: ", len(self.img_list))
+
+    def __len__(self):
+        return len(self.img_list)
+
+    def __getitem__(self, idx):
+
+
+        img_path = pjoin(self.img_list[idx][0], "Render_before_BGcollection.{:04d}.exr".format(self.img_list[idx][1]))
+        prev_img_path = pjoin(self.img_list[idx][0], "Render.{:04d}.exr".format(self.img_list[idx][1]-1))
+        prevprev_img_path = pjoin(self.img_list[idx][0], "Render.{:04d}.exr".format(self.img_list[idx][1]-3))
+
+        background = pjoin(self.img_list[idx][0], "Background.{:04d}.exr".format(self.img_list[idx][1]))
+        Depth_path = pjoin(self.img_list[idx][0], "LinearZ.{:04d}.exr".format(self.img_list[idx][1]))
+        GT_path = pjoin(self.img_list[idx][0], "GT.{:04d}.exr".format(self.img_list[idx][1]))
+
+        img = np.clip(np.array(load_exr(img_path)), -10, 100)
+        prev_img = np.clip(np.array(load_exr(prev_img_path)), -10, 100)
+        prevprev_img = np.clip(np.array(load_exr(prevprev_img_path)), -10, 100)
+        background = np.clip(np.array(load_exr(background)), -10, 100)
+        Depth = np.array(load_exr(Depth_path))[..., :1]
+        GT = np.clip(np.array(load_exr(GT_path)), 0, 100)
+
+        img = ToneSimple_muLaw_numpy(img * self.exposure)
+        prev_img = ToneSimple_muLaw_numpy(prev_img * self.exposure)
+        prevprev_img = ToneSimple_muLaw_numpy(prevprev_img * self.exposure)
+        background = ToneSimple_muLaw_numpy(background * self.exposure)
+        GT = ToneSimple_muLaw_numpy(GT * self.exposure)
+
+    
+        if self.augment == True:
+
+            img_list = [img, Depth, GT, background, prev_img, prevprev_img]
+            img_list = random_crop(img_list, crop_size=(512, 512))
+            img_list = random_reverse_channel(img_list, p=0.5)
+            img_list = random_vertical_flip(img_list, p=0.3)
+            img_list = random_horizontal_flip(img_list, p=0.5)
+
+            img, Depth, GT, background, prev_img, prevprev_img = img_list
+
+        img = torch.from_numpy(img.transpose((2, 0, 1)).copy())
+        Depth = torch.from_numpy(Depth.transpose((2, 0, 1)).copy())
+        GT = torch.from_numpy(GT.transpose((2, 0, 1)).copy())
+        background = torch.from_numpy(background.transpose((2, 0, 1)).copy())
+        prev_img = torch.from_numpy(prev_img.transpose((2, 0, 1)).copy())
+        prevprev_img = torch.from_numpy(prevprev_img.transpose((2, 0, 1)).copy())
+
+
+        return img, Depth, GT, background, prev_img, prevprev_img
 
 
 class Vimeo90K_Test_Dataset(Dataset):
