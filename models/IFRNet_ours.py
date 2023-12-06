@@ -623,7 +623,7 @@ class BGCollection_Refine_Model(nn.Module):
         # imgt_pred = torch.clamp(imgt_pred, 0, 1)
 
 
-        return imgt_pred, img_warp, up_mask_1
+        return imgt_pred, img_warp + mean_, up_mask_1
 
 
     def forward(self, img0, img1, imgt, img_bg, depth):
@@ -672,7 +672,7 @@ class BGCollection_Refine_Model(nn.Module):
         loss_geo = 0.01 * (self.gc_loss(ft_1_, ft_1) + self.gc_loss(ft_2_, ft_2) + self.gc_loss(ft_3_, ft_3))
         loss_regular = 0.01 * self.l1_loss(up_res_1)
 
-        return imgt_pred, img_warp, up_mask_1, loss_rec, loss_geo, loss_regular
+        return imgt_pred, img_warp + mean_, up_mask_1, loss_rec, loss_geo, loss_regular
     
 def KernelFilter(input, kernel):
 
